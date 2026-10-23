@@ -18,3 +18,8 @@ htmlcov/
 *.spec.bak
 build/
 dist/
+# Windows desktop release: keep zip, ignore unpacked onedir binaries
+release/windows/container-packing-windows-x64.zip
+release/windows/container_packing/
+release/linux/
+release/.tmp/
