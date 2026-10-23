@@ -8,22 +8,27 @@ const loading = ref(false);
 const error = ref("");
 
 const modeLabel = computed(() => (t: Task) => {
+  let m: Record<string, unknown> = {};
   try {
-    const m = JSON.parse(t.container_mode_json || "{}");
-    if (m.mode === "freemix") {
-      const lock = (m.type_lock as string[]) || [];
-      const locked = (m.qty_lock as Record<string, number>) || {};
-      const parts = lock.map((c) => (locked[c] ? `${c}=${locked[c]}` : c));
-      return `自由组合：${parts.join(", ") || "未设"}`;
-    }
-    const fixed = (m.fixed as Record<string, number>) || {};
-    const entries = Object.entries(fixed);
-    if (entries.length) return entries.map(([c, n]) => `${c} × ${n}`).join("  ");
-    if (m.type_code) return `${m.type_code} × ${m.count ?? 1}`;
-    return "未设置";
+    const v = t.container_mode_json;
+    m = typeof v === "string" ? JSON.parse(v || "{}") : (v || {});
   } catch {
-    return t.container_mode_json || "未设置";
+    m = {};
   }
+  if (m.mode === "freemix") {
+    const lock = (m.type_lock as string[]) || [];
+    const locked = (m.qty_lock as Record<string, number>) || {};
+    const parts = lock.map((c) => (locked[c] ? `${c}=${locked[c]}` : c));
+    return `自由组合：${parts.join(", ") || "未设"}`;
+  }
+  const fixed = (m.fixed as Record<string, number>) || {};
+  const entries = Object.entries(fixed);
+  if (entries.length) {
+    const [code, n] = entries[0];
+    return `${code} × ${n}`;
+  }
+  if (m.type_code) return `${m.type_code} × ${m.count ?? 1}`;
+  return "未设置";
 });
 
 async function load() {

@@ -30,22 +30,31 @@ const error = ref("");
 const selected = ref<Placement | null>(null);
 const algos = ref<string[]>(ALGORITHMS.map((a) => a.key));
 
+const _parseJsonField = (v: unknown): Record<string, unknown> => {
+  if (v == null) return {};
+  if (typeof v === "string") {
+    try {
+      return JSON.parse(v) || {};
+    } catch {
+      return {};
+    }
+  }
+  if (typeof v === "object") return v as Record<string, unknown>;
+  return {};
+};
+
 const mode = computed(() => {
   if (!task.value) return null;
-  try {
-    const m = JSON.parse(task.value.container_mode_json || "{}");
-    if (m.mode === "freemix") {
-      const lock = (m.type_lock as string[]) || [];
-      if (!lock.length) return null;
-      return m;
-    }
-    const fixed = (m.fixed as Record<string, number>) || {};
-    if (Object.keys(fixed).length) return m;
-    if (m.type_code) return m;
-    return null;
-  } catch {
-    return null;
+  const m = _parseJsonField(task.value.container_mode_json);
+  if (m.mode === "freemix") {
+    const lock = (m.type_lock as string[]) || [];
+    if (!lock.length) return null;
+    return m;
   }
+  const fixed = (m.fixed as Record<string, number>) || {};
+  if (Object.keys(fixed).length) return m;
+  if (m.type_code) return m;
+  return null;
 });
 
 const modeSummary = computed(() => {
@@ -56,21 +65,19 @@ const modeSummary = computed(() => {
     return `自由组合：${lock.join(", ")}`;
   }
   const fixed = (m.fixed as Record<string, number>) || {};
-  if (Object.keys(fixed).length) {
-    return Object.entries(fixed).map(([c, n]) => `${c} × ${n}`).join("  ");
+  const entries = Object.entries(fixed);
+  if (entries.length) {
+    const [code, n] = entries[0];
+    return `${code} × ${n}`;
   }
   if (m.type_code) return `${m.type_code} × ${m.count ?? 1}`;
   return null;
 });
 
 const enabledRules = computed(() => {
-  if (!task.value?.rules_json) return [];
-  try {
-    const r = JSON.parse(task.value.rules_json);
-    return Array.isArray(r) ? r : [];
-  } catch {
-    return [];
-  }
+  const r = _parseJsonField(task.value?.rules_json);
+  if (Array.isArray(r)) return r;
+  return [];
 });
 
 const canCompute = computed(() => {

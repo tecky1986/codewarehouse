@@ -28,12 +28,8 @@ async function load() {
   let enabled: string[] = [];
   const raw = task.value!.rules_json;
   if (raw) {
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) enabled = parsed;
-    } catch {
-      enabled = [];
-    }
+    const parsed = typeof raw === "string" ? JSON.parse(raw || "[]") : raw;
+    if (Array.isArray(parsed)) enabled = parsed;
   }
   ruleOrder.value = enabled.filter((k) => ALL_RULES.some((r) => r.key === k));
   for (const r of ALL_RULES) {

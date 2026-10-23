@@ -29,10 +29,33 @@ def list_tasks(repo: TaskRepo = Depends(_task_repo)):
     return ok(repo.list_all())
 
 
+@router.get("/sample.xlsx")
+def sample_xlsx(conn=Depends(get_conn)):
+    """下载示例导入表（测试期功能，上线前移除）。"""
+    from openpyxl import Workbook
+
+    from app.seed import SAMPLE_IMPORT_ROWS, SAMPLE_IMPORT_ROWS_HEADER
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "sample"
+    ws.append(SAMPLE_IMPORT_ROWS_HEADER)
+    for row in SAMPLE_IMPORT_ROWS:
+        ws.append(row)
+    from io import BytesIO
+
+    buf = BytesIO()
+    wb.save(buf)
+    headers = {"Content-Disposition": content_disposition("示例导入表.xlsx")}
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
+    )
+
+
 @router.post("")
 def create_task(body: dict, repo: TaskRepo = Depends(_task_repo)):
-    if not body.get("name"):
-        return fail("E_VALIDATION", "name is required", status=422)
     return ok(repo.create(body))
 
 

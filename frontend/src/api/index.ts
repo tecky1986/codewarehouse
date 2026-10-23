@@ -24,9 +24,9 @@ export interface Task {
   id: number;
   name: string;
   created_at?: string;
-  container_mode_json?: string;
-  rules_json?: string;
-  site_groups_json?: string;
+  container_mode_json?: string | Record<string, unknown>;
+  rules_json?: string | unknown[];
+  site_groups_json?: string | Record<string, unknown>;
   adopted_plan_id?: number | null;
   status?: string;
 }
@@ -80,6 +80,7 @@ export const Tasks = {
       method: "PUT",
       body: JSON.stringify(groups),
     }),
+  sampleXlsxUrl: () => "/api/tasks/sample.xlsx",
 };
 
 // ---- jobs

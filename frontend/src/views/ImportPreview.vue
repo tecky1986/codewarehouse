@@ -23,8 +23,9 @@ const hasMode = ref(false);
 
 // mode: "fixed" | "freemix"
 const mode = ref<"fixed" | "freemix">("fixed");
-// fixed: map code -> count
-const fixedCounts = ref<Record<string, number>>({});
+// fixed: single type + count
+const fixedType = ref("");
+const fixedCount = ref(1);
 // freemix: type lock + qty lock + max
 const freemixTypeLock = ref<Record<string, boolean>>({});
 const freemixQtyLock = ref<Record<string, string>>({});
@@ -45,7 +46,8 @@ async function load() {
   const task = await Tasks.get(tid.value);
   let raw: Record<string, unknown> = {};
   try {
-    raw = JSON.parse(task.container_mode_json || "{}");
+    const v = task.container_mode_json;
+    raw = typeof v === "string" ? JSON.parse(v || "{}") : (v || {});
   } catch {
     raw = {};
   }
@@ -59,15 +61,24 @@ async function load() {
     for (const [k, v] of Object.entries(maxQty)) freemixMaxQty.value[k] = String(v);
   } else {
     mode.value = "fixed";
+    // 兼容旧数据：单元素 fixed 映射到 type_code，legacy 字段优先
+    const legacyType = (raw.type_code as string) || "";
     const fixed = (raw.fixed as Record<string, number>) || {};
-    for (const [code, n] of Object.entries(fixed)) fixedCounts.value[code] = n;
-    if (raw.type_code && !fixed[raw.type_code as string]) {
-      fixedCounts.value[raw.type_code as string] = (raw.count as number) || 1;
+    const entries = Object.entries(fixed);
+    if (legacyType && (raw.count != null || entries.length === 0)) {
+      fixedType.value = legacyType;
+      fixedCount.value = (raw.count as number) || 1;
+    } else if (entries.length > 0) {
+      fixedType.value = entries[0][0];
+      fixedCount.value = entries[0][1];
+    } else {
+      fixedType.value = "";
+      fixedCount.value = 1;
     }
   }
   hasMode.value =
     mode.value === "fixed"
-      ? Object.keys(fixedCounts.value).length > 0
+      ? fixedType.value !== ""
       : Object.values(freemixTypeLock.value).some(Boolean);
 }
 
@@ -90,13 +101,9 @@ async function onFileSelected() {
 async function saveContainerMode() {
   let payload: Record<string, unknown>;
   if (mode.value === "fixed") {
-    const fixed: Record<string, number> = {};
-    for (const [code, n] of Object.entries(fixedCounts.value)) {
-      const v = Number(n);
-      if (v > 0) fixed[code] = v;
-    }
-    if (Object.keys(fixed).length === 0) return;
-    payload = { mode: "fixed", fixed };
+    const count = Number(fixedCount.value);
+    if (!fixedType.value || Number.isNaN(count) || count < 1) return;
+    payload = { mode: "fixed", fixed: { [fixedType.value]: count } };
   } else {
     const typeLock = Object.entries(freemixTypeLock.value)
       .filter(([, v]) => v)
@@ -171,6 +178,7 @@ onMounted(load);
       <div class="actions">
         <router-link to="/tasks" class="ghost">返回</router-link>
         <button @click="downloadPending" :disabled="!preview?.row_count">下载待填规格</button>
+        <a class="link" href="/api/tasks/sample.xlsx" target="_blank">下载示例表</a>
       </div>
     </div>
 
@@ -189,28 +197,18 @@ onMounted(load);
         </label>
       </div>
 
-      <!-- fixed: per-type counts -->
+      <!-- fixed: single type + count -->
       <div v-if="mode === 'fixed'" class="mode-body">
-        <div class="hint">勾选箱型并填写数量；同箱型或多箱型均可。</div>
-        <table class="mode-tbl">
-          <thead>
-            <tr>
-              <th v-for="t in types" :key="t.id">{{ t.code }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td v-for="t in types" :key="t.id">
-                <input
-                  type="number"
-                  min="0"
-                  v-model.number="fixedCounts[t.code]"
-                  placeholder="0"
-                />
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="hint">选择一种箱型与数量。</div>
+        <div class="form-row" style="margin-top: 8px">
+          <select v-model="fixedType">
+            <option value="">选择箱型</option>
+            <option v-for="t in types" :key="t.id" :value="t.code">
+              {{ t.code }} — {{ t.name }}
+            </option>
+          </select>
+          <input type="number" v-model.number="fixedCount" min="1" class="count" />
+        </div>
       </div>
 
       <!-- freemix: type lock + qty lock + max -->

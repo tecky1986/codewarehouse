@@ -21,7 +21,7 @@ def reset_conn_for_tests(path):
         _CONN.close()
     _CONN = connect(path)
     init_schema(_CONN)
-    seed_if_empty(_CONN)
+    seed_if_empty(_CONN, with_sample=False)
     return _CONN
 
 

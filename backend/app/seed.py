@@ -52,8 +52,63 @@ DEFAULT_SETTINGS = {
 }
 
 
-def seed_if_empty(conn) -> None:
-    from app.repos import ContainerTypeRepo, SettingRepo, ExportTemplateRepo
+# 测试期示例数据：正式上线前移除（见 README 与 tasklist 18）
+SAMPLE_PACKAGES = [
+    {
+        "pn": None,
+        "name": "OUTCASE(IB-1)",
+        "package_type": "OUTCASE(IB-1)",
+        "l": 1460,
+        "w": 1150,
+        "h": 1100,
+        "volume": 1.85,
+        "tare": 136.0,
+        "net": 256.0,
+        "gross": 392.0,
+        "remark": "sample",
+        "enabled": 1,
+    },
+    {
+        "pn": "ACW1081490*80",
+        "name": "OUTCASE(VEN)",
+        "package_type": "OUTCASE(VEN)",
+        "l": 600,
+        "w": 400,
+        "h": 400,
+        "volume": 0.096,
+        "tare": 12.0,
+        "net": 58.0,
+        "gross": 70.0,
+        "remark": "sample",
+        "enabled": 1,
+    },
+]
+
+# 与示例 xlsx 一致的导入行（17 列 A–Q，N 列忽略）
+SAMPLE_IMPORT_ROWS_HEADER = [
+    "箱号 No", "长 Length", "宽 width", "高 high", "体积 CBM", "OUTCASE NO.",
+    "PackMatls", "箱重/Tare weight", "净重 NET WEIGHT", "毛重 TOTAL WEIGHT",
+    "PN", "备注", "Site", "集装箱号 ontBiner No", "关单号", "DN", "尺寸",
+]
+SAMPLE_IMPORT_ROWS = [
+    # a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q
+    [1, 146, 115, 110, 1.85, "5000931045", "OUTCASE(IB-1)", 136, 256, 392, None, None, "Canoas", None, None, 80129743, None],
+    [2, 146, 115, 110, 1.85, "5000931071", "OUTCASE(IB-1)", 136, 524, 660, None, None, "Canoas", None, None, 80129743, None],
+    [3, None, None, None, None, "5000931481", "OUTCASE(VEN)", None, None, None, "ACW1081490*80", None, "Canoas", None, None, 80129743, None],
+    [4, None, None, None, None, "5000931482", "OUTCASE(VEN)", None, None, None, "ACW1081490*80", None, "Canoas", None, None, 80129743, None],
+]
+
+
+def seed_if_empty(conn, with_sample: bool = True) -> None:
+    """Preload preset data. with_sample=False 跳过测试期示例数据。"""
+    from app.repos import (
+        ContainerTypeRepo,
+        PackageMasterRepo,
+        SettingRepo,
+        ExportTemplateRepo,
+        ImportRowRepo,
+        TaskRepo,
+    )
 
     repo = ContainerTypeRepo(conn)
     if not repo.list_all():
@@ -76,3 +131,26 @@ def seed_if_empty(conn) -> None:
                 "columns_json": default_template_columns(),
             }
         )
+
+    if not with_sample:
+        return
+
+    # 示例包装主数据（测试期，上线前移除）
+    pkg = PackageMasterRepo(conn)
+    for item in SAMPLE_PACKAGES:
+        pn = item.get("pn")
+        if pn:
+            if not pkg.get_by_pn(pn):
+                pkg.create(item)
+        else:
+            if not pkg.get_by_packmatls(item["package_type"]):
+                pkg.create(item)
+
+    # 示例任务 + 导入行（测试期，上线前移除）
+    from app.importing import map_raw_rows
+
+    tasks = TaskRepo(conn)
+    if not any(t["name"] == "示例任务" for t in tasks.list_all()):
+        sample_task = tasks.create({"name": "示例任务"})
+        rows = map_raw_rows([SAMPLE_IMPORT_ROWS_HEADER] + SAMPLE_IMPORT_ROWS)
+        ImportRowRepo(conn).replace_for_task(sample_task["id"], rows)
