@@ -1,0 +1,554 @@
+<script setup lang="ts">
+import {
+  ref,
+  watch,
+  onMounted,
+  onBeforeUnmount,
+  nextTick,
+  computed,
+} from "vue";
+import * as THREE from "three";
+import type { Placement, ContainerKpi } from "@/api";
+
+const props = defineProps<{
+  containers: ContainerKpi[];
+  placements: Placement[];
+}>();
+
+const emit = defineEmits<{
+  (e: "select", p: Placement | null): void;
+}>();
+
+const canvasEl = ref<HTMLCanvasElement>();
+const activeIdx = ref(0);
+const selected = ref<Placement | null>(null);
+const playing = ref(false);
+const playStep = ref(0);
+const speed = ref<0.5 | 1 | 2 | 4>(1);
+const showAll = ref(false);
+
+let scene: THREE.Scene | null = null;
+let camera: THREE.PerspectiveCamera | null = null;
+let renderer: THREE.WebGLRenderer | null = null;
+let containerGroup: THREE.Group | null = null;
+let outline: THREE.LineSegments | null = null;
+let animId = 0;
+let playTimer: ReturnType<typeof setInterval> | null = null;
+
+const active = computed(
+  () => props.containers[activeIdx.value] ?? props.containers[0] ?? null,
+);
+
+const containerPlacements = computed(() => {
+  if (!active.value) return [];
+  const label = active.value.label;
+  return props.placements.filter(
+    (p) => p.container_id !== null && p.label === label,
+  );
+});
+
+const totalSteps = computed(() => containerPlacements.value.length);
+
+function dims(): { l: number; w: number; h: number } {
+  const t = active.value;
+  if (t && t.payload_capacity_kg > 0) {
+    const code = t.type_code || "";
+    const map: Record<string, { l: number; w: number; h: number }> = {
+      "20GP": { l: 5900, w: 2350, h: 2390 },
+      "40GP": { l: 12030, w: 2350, h: 2390 },
+      "40HC": { l: 12030, w: 2350, h: 2685 },
+      "40HQ": { l: 12030, w: 2350, h: 2685 },
+      "45HC": { l: 16150, w: 2350, h: 2685 },
+      "20RF": { l: 5900, w: 2350, h: 2390 },
+    };
+    return map[code] || { l: 5900, w: 2350, h: 2390 };
+  }
+  return { l: 5900, w: 2350, h: 2390 };
+}
+
+function buildScene() {
+  if (!canvasEl.value) return;
+  const w = canvasEl.value.clientWidth || 800;
+  const h = canvasEl.value.clientHeight || 500;
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xf5f3f0);
+
+  camera = new THREE.PerspectiveCamera(45, w / h, 1, 100000);
+
+  renderer = new THREE.WebGLRenderer({
+    canvas: canvasEl.value,
+    antialias: true,
+  });
+  renderer.setSize(w, h);
+  renderer.setPixelRatio(window.devicePixelRatio);
+
+  const amb = new THREE.AmbientLight(0xffffff, 0.7);
+  scene.add(amb);
+  const dir = new THREE.DirectionalLight(0xffffff, 0.6);
+  dir.position.set(0, 200, 0);
+  scene.add(dir);
+
+  containerGroup = new THREE.Group();
+  scene.add(containerGroup);
+
+  canvasEl.value.addEventListener(
+    "pointerdown",
+    (ev: PointerEvent) => {
+      onPointerDown(ev);
+    },
+  );
+  canvasEl.value.addEventListener("pointerup", onPointerUp);
+  canvasEl.value.addEventListener("pointerleave", onPointerUp);
+  canvasEl.value.addEventListener("wheel", onWheel, { passive: false });
+  window.addEventListener("resize", onResize);
+
+  function loop() {
+    animId = requestAnimationFrame(loop);
+    renderer?.render(scene!, camera!);
+  }
+  loop();
+}
+
+function createBox(p: Placement, L: { l: number; w: number; h: number }) {
+  const dx = p.dim_x;
+  const dy = p.dim_y;
+  const dz = p.dim_z;
+  if (dx <= 0 || dy <= 0 || dz <= 0) return null;
+
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x2f6f4f,
+    transparent: true,
+    opacity: 0.85,
+  });
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(dx, dz, dy), mat);
+
+  mesh.position.set(
+    p.z + dy / 2,
+    p.y + dz / 2,
+    L.l - p.x - dx / 2,
+  );
+
+  mesh.userData.importRowId = p.import_row_id;
+  mesh.userData.p = p;
+  return mesh;
+}
+
+function buildContainer3D() {
+  if (!scene || !containerGroup || !active.value) return;
+  containerGroup.clear();
+  clearHighlight();
+
+  const L = dims();
+
+  const geo = new THREE.BoxGeometry(L.l, L.h, L.w);
+  const edges = new THREE.EdgesGeometry(geo);
+  const line = new THREE.LineSegments(
+    edges,
+    new THREE.LineBasicMaterial({ color: 0x888888 }),
+  );
+  line.position.set(L.l / 2, L.h / 2, L.w / 2);
+  containerGroup.add(line);
+
+  const floorGeo = new THREE.PlaneGeometry(L.l, L.w);
+  const floor = new THREE.Mesh(
+    floorGeo,
+    new THREE.MeshBasicMaterial({ color: 0xe8e4e0, side: THREE.DoubleSide }),
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(L.l / 2, 0, L.w / 2);
+  containerGroup.add(floor);
+
+  const shown = showAll.value
+    ? containerPlacements.value
+    : containerPlacements.value.slice(0, playStep.value + 1);
+
+  for (const p of shown) {
+    const mesh = createBox(p, L);
+    if (mesh) containerGroup.add(mesh);
+  }
+
+  centerOnBounds(shown, L);
+}
+
+function centerOnBounds(
+  placed: Placement[],
+  L: { l: number; w: number; h: number },
+) {
+  if (!camera || !scene) return;
+  const pts: THREE.Vector3[] = [];
+  for (const p of placed) {
+    pts.push(new THREE.Vector3(p.z, p.y, L.l - p.x));
+  }
+  if (pts.length === 0) {
+    pts.push(new THREE.Vector3(L.w / 2, 0, L.l / 2));
+  }
+  const bb = new THREE.Box3();
+  for (const p of pts) bb.expandByPoint(p);
+  const center = bb.getCenter(new THREE.Vector3());
+  const size = bb.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z, 1000);
+  const theta = 0.6;
+  const phi = 0.4;
+  const radius = maxDim * 1.4;
+  camera.position.set(
+    center.x + radius * Math.sin(phi) * Math.sin(theta),
+    center.y + radius * Math.cos(phi),
+    center.z + radius * Math.sin(phi) * Math.cos(theta),
+  );
+  camera.lookAt(center);
+}
+
+function highlight(p: Placement) {
+  clearHighlight();
+  if (!containerGroup) return;
+  for (const obj of containerGroup.children) {
+    if (
+      obj instanceof THREE.Mesh &&
+      obj.userData.importRowId === p.import_row_id
+    ) {
+      const w = (obj.geometry as THREE.BoxGeometry).parameters.width * 1.02;
+      const h = (obj.geometry as THREE.BoxGeometry).parameters.height * 1.02;
+      const d = (obj.geometry as THREE.BoxGeometry).parameters.depth * 1.02;
+      const geo = new THREE.BoxGeometry(w, h, d);
+      const edges = new THREE.EdgesGeometry(geo);
+      outline = new THREE.LineSegments(
+        edges,
+        new THREE.LineBasicMaterial({ color: 0xff5500, linewidth: 3 }),
+      );
+      outline.position.copy(obj.position);
+      containerGroup.add(outline);
+      (obj.material as THREE.MeshStandardMaterial).color.set(0x1a5c38);
+      return;
+    }
+  }
+}
+
+function clearHighlight() {
+  if (outline && containerGroup) {
+    containerGroup.remove(outline);
+    outline.geometry.dispose();
+    (outline.material as THREE.Material).dispose();
+    outline = null;
+  }
+}
+
+function rebuild() {
+  if (!containerGroup || !scene) return;
+  containerGroup.clear();
+  clearHighlight();
+  buildContainer3D();
+}
+
+function onContainerChange(idx: number) {
+  activeIdx.value = idx;
+  selected.value = null;
+  emit("select", null);
+  playStep.value = 0;
+  stopPlayback();
+  rebuild();
+}
+
+function startPlayback() {
+  stopPlayback();
+  playStep.value = 0;
+  playing.value = true;
+  const ms = 600 / speed.value;
+  playTimer = setInterval(() => {
+    playStep.value++;
+    if (playStep.value >= totalSteps.value) {
+      stopPlayback();
+      playStep.value = totalSteps.value;
+      rebuild();
+      return;
+    }
+    rebuild();
+  }, ms);
+}
+
+function stopPlayback() {
+  if (playTimer) clearInterval(playTimer);
+  playTimer = null;
+  playing.value = false;
+}
+
+function stepForward() {
+  stopPlayback();
+  playStep.value = Math.min(totalSteps.value, playStep.value + 1);
+  rebuild();
+}
+
+function stepBack() {
+  stopPlayback();
+  playStep.value = Math.max(0, playStep.value - 1);
+  rebuild();
+}
+
+function setSpeed(s: 0.5 | 1 | 2 | 4) {
+  speed.value = s;
+  if (playing.value) startPlayback();
+}
+
+function onPointerDown(ev: PointerEvent) {
+  if (!canvasEl.value || !camera) return;
+  const rect = canvasEl.value.getBoundingClientRect();
+  const mx = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+  const my = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(new THREE.Vector2(mx, my), camera);
+  const meshes = containerGroup?.children.filter(
+    (c): c is THREE.Mesh => c instanceof THREE.Mesh,
+  );
+  const hits = raycaster.intersectObjects(meshes || []);
+  if (hits.length > 0) {
+    const p = hits[0].object.userData.p;
+    if (p) {
+      selected.value = p;
+      emit("select", p);
+      highlight(p);
+    }
+  } else {
+    selected.value = null;
+    emit("select", null);
+    clearHighlight();
+  }
+}
+
+function onPointerUp() {
+  /* no-op */
+}
+
+function onWheel(ev: WheelEvent) {
+  ev.preventDefault();
+  /* zoom handled by camera radius */
+}
+
+function onResize() {
+  if (!canvasEl.value || !renderer || !camera) return;
+  const w = canvasEl.value.clientWidth;
+  const h = canvasEl.value.clientHeight;
+  if (w === 0 || h === 0) return;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+}
+
+onMounted(async () => {
+  await nextTick();
+  buildScene();
+  rebuild();
+});
+
+onBeforeUnmount(() => {
+  stopPlayback();
+  cancelAnimationFrame(animId);
+  window.removeEventListener("resize", onResize);
+  renderer?.dispose();
+});
+
+watch(
+  () => [props.containers, props.placements],
+  () => {
+    activeIdx.value = 0;
+    playStep.value = 0;
+    stopPlayback();
+    rebuild();
+  },
+  { deep: false },
+);
+
+watch(activeIdx, (v) => onContainerChange(v));
+
+defineExpose({
+  startPlayback,
+  stopPlayback,
+  stepForward,
+  stepBack,
+  setSpeed,
+});
+</script>
+
+<template>
+  <div class="view3d">
+    <div v-if="containers.length > 1" class="tabs">
+      <button
+        v-for="(c, i) in containers"
+        :key="c.label || i"
+        :class="['tab', { active: i === activeIdx }]"
+        @click="onContainerChange(i)"
+      >
+        {{ c.label || `箱${i + 1}` }}
+      </button>
+    </div>
+
+    <div class="canvas-wrap">
+      <canvas ref="canvasEl" class="canvas"></canvas>
+      <div v-if="!active" class="empty">暂无集装箱</div>
+    </div>
+
+    <div class="controls">
+      <button @click="stepBack" :disabled="playStep <= 0" title="上一步">
+        &lt;
+      </button>
+      <button @click="playing ? stopPlayback() : startPlayback()" :class="{ primary: true }">
+        {{ playing ? "暂停" : "回放" }}
+      </button>
+      <button @click="stepForward" :disabled="playStep >= totalSteps - 1" title="下一步">
+        &gt;
+      </button>
+      <span class="step-label">
+        步 {{ playStep + 1 }} / {{ totalSteps }}
+      </span>
+
+      <label class="speed">
+        倍速
+        <select v-model="speed" @change="setSpeed(speed as 0.5 | 1 | 2 | 4)">
+          <option :value="0.5">0.5×</option>
+          <option :value="1">1×</option>
+          <option :value="2">2×</option>
+          <option :value="4">4×</option>
+        </select>
+      </label>
+
+      <label class="all-toggle">
+        <input type="checkbox" v-model="showAll" @change="rebuild" />
+        全部
+      </label>
+    </div>
+
+    <div v-if="selected" class="sel-info">
+      <span class="pn">{{ selected.k_pn }}</span>
+      <span>{{ selected.g_packmatls }}</span>
+      <span>顺序 {{ selected.load_seq }}</span>
+      <span>
+        x={{ selected.x }} y={{ selected.y }} z={{ selected.z }}
+      </span>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.view3d {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tab {
+  padding: 4px 14px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.tab.active {
+  background: #1a5c38;
+  color: #fff;
+  border-color: #1a5c38;
+}
+
+.canvas-wrap {
+  position: relative;
+  width: 100%;
+  height: 420px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #f5f3f0;
+}
+
+.canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #999;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.controls button {
+  padding: 4px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.controls button.primary {
+  background: #1a5c38;
+  color: #fff;
+  border-color: #1a5c38;
+}
+
+.controls button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.step-label {
+  font-size: 13px;
+  color: #555;
+}
+
+.speed {
+  font-size: 13px;
+  color: #555;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.speed select {
+  padding: 2px 6px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.all-toggle {
+  font-size: 13px;
+  color: #555;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.sel-info {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 8px 12px;
+  background: #f9f7f4;
+  border: 1px solid #e8e4e0;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #444;
+}
+
+.sel-info .pn {
+  font-weight: 600;
+  color: #1a5c38;
+}
+</style>

@@ -1,0 +1,216 @@
+<script setup lang="ts">
+import { ref, onMounted, computed } from "vue";
+import { Tasks, type Task } from "@/api";
+
+const tasks = ref<Task[]>([]);
+const newTaskName = ref("");
+const loading = ref(false);
+const error = ref("");
+
+const modeLabel = computed(() => (t: Task) => {
+  try {
+    const m = JSON.parse(t.container_mode_json || "{}");
+    if (m.mode === "freemix") {
+      const lock = (m.type_lock as string[]) || [];
+      const locked = (m.qty_lock as Record<string, number>) || {};
+      const parts = lock.map((c) => (locked[c] ? `${c}=${locked[c]}` : c));
+      return `自由组合：${parts.join(", ") || "未设"}`;
+    }
+    const fixed = (m.fixed as Record<string, number>) || {};
+    const entries = Object.entries(fixed);
+    if (entries.length) return entries.map(([c, n]) => `${c} × ${n}`).join("  ");
+    if (m.type_code) return `${m.type_code} × ${m.count ?? 1}`;
+    return "未设置";
+  } catch {
+    return t.container_mode_json || "未设置";
+  }
+});
+
+async function load() {
+  loading.value = true;
+  error.value = "";
+  try {
+    tasks.value = await Tasks.list();
+  } catch (e) {
+    error.value = (e as Error).message;
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function createTask() {
+  const name = newTaskName.value.trim();
+  if (!name) return;
+  await Tasks.create(name);
+  newTaskName.value = "";
+  await load();
+}
+
+async function removeTask(t: Task) {
+  if (!confirm(`删除任务「${t.name}」？`)) return;
+  await Tasks.remove(t.id);
+  await load();
+}
+
+onMounted(load);
+</script>
+
+<template>
+  <div class="page">
+    <div class="top">
+      <h1>任务</h1>
+      <div class="create-row">
+        <input
+          v-model="newTaskName"
+          placeholder="新任务名称"
+          @keyup.enter="createTask"
+        />
+        <button class="primary" @click="createTask" :disabled="!newTaskName.trim()">
+          新建
+        </button>
+      </div>
+    </div>
+
+    <p v-if="error" class="error">{{ error }}</p>
+
+    <table v-if="tasks.length" class="tbl">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>名称</th>
+          <th>箱型</th>
+          <th>创建</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="t in tasks" :key="t.id">
+          <td>{{ t.id }}</td>
+          <td>
+            <router-link :to="`/tasks/${t.id}`">{{ t.name }}</router-link>
+          </td>
+          <td>{{ modeLabel(t) }}</td>
+          <td>{{ t.created_at ? t.created_at.replace("T", " ").slice(0, 16) : "" }}</td>
+          <td class="ops">
+            <button @click="removeTask(t)" class="danger">删除</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p v-else-if="!loading" class="empty">暂无任务，请新建。</p>
+    <p v-if="loading" class="loading">加载中…</p>
+  </div>
+</template>
+
+<style scoped>
+.page {
+  padding: 32px 40px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+h1 {
+  font-size: 22px;
+  font-weight: 500;
+  color: #2c2c2c;
+  margin: 0;
+}
+
+.create-row {
+  display: flex;
+  gap: 8px;
+}
+
+.create-row input {
+  padding: 6px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  width: 180px;
+}
+
+button.primary {
+  padding: 6px 18px;
+  background: #1a5c38;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+button.primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tbl th {
+  text-align: left;
+  font-weight: 500;
+  font-size: 13px;
+  color: #888;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e8e4e0;
+}
+
+.tbl td {
+  padding: 10px 12px;
+  font-size: 14px;
+  border-bottom: 1px solid #f0ede8;
+  color: #333;
+}
+
+.ops {
+  text-align: right;
+}
+
+.ops button {
+  padding: 3px 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ops button.danger {
+  color: #c62828;
+  border-color: #c62828;
+}
+
+a {
+  color: #1a5c38;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.empty,
+.loading {
+  color: #999;
+  font-size: 14px;
+  padding: 24px 0;
+  text-align: center;
+}
+
+.error {
+  color: #c62828;
+  font-size: 13px;
+  margin: 0;
+}
+</style>
