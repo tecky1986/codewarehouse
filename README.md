@@ -118,3 +118,9 @@ curl -s http://127.0.0.1:8000/api/health
 `pyinstaller container_packing.spec --clean -y` 产出
 `dist/container_packing/container_packing.exe`。冻结模式下启动脚本在进程内运行
 uvicorn（`sys.frozen` 检测），资源经 `sys._MEIPASS/_internal` 解析，与源码模式行为一致。
+
+### GitHub Release 下载
+
+推送 `v*` 版本 tag 会自动构建 Linux x64 和 Windows x64 分发压缩包，并附加到 GitHub Release。
+用户可在仓库 Releases 页面下载对应平台的 zip，解压后运行目录中的 `container_packing` 或
+`container_packing.exe`；请保留同目录的 `_internal/` 资源目录。
