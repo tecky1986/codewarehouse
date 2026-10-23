@@ -1,0 +1,63 @@
+name: Windows executable
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "container_packing.spec"
+      - "start.py"
+      - "backend/**"
+      - "frontend/**"
+      - ".github/workflows/windows-build.yml"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install backend and packager dependencies
+        run: python -m pip install -r backend/requirements.txt pyinstaller
+
+      - name: Assemble static assets
+        shell: pwsh
+        run: |
+          if (Test-Path backend/static) { Remove-Item backend/static -Recurse -Force }
+          Copy-Item frontend/dist backend/static -Recurse
+
+      - name: Package Windows application
+        run: python -m PyInstaller container_packing.spec --clean -y
+
+      - name: Verify executable
+        shell: pwsh
+        run: |
+          if (-not (Test-Path dist/container_packing/container_packing.exe)) {
+            throw "PyInstaller did not produce the expected executable."
+          }
+
+      - name: Upload distributable
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-packing-windows-${{ github.sha }}
+          path: dist/container_packing/
+          if-no-files-found: error
+          retention-days: 14
