@@ -152,13 +152,29 @@ def missing_keys(rows: list[dict]) -> list[dict]:
     return seen
 
 
+def _distinct_sites(rows: list[dict]) -> list[str]:
+    sites: list[str] = []
+    seen: set[str] = set()
+    has_rows = False
+    for r in rows:
+        has_rows = True
+        site = str(r.get("m_site") or "").strip()
+        if site and site not in seen:
+            seen.add(site)
+            sites.append(site)
+    return sites, has_rows
+
+
 def preview_payload(rows: list[dict]) -> dict:
     miss = missing_keys(rows)
+    distinct_sites, has_rows = _distinct_sites(rows)
     return {
         "rows": rows,
         "missing": miss,
         "can_compute": len(miss) == 0 and all(r.get("complete") for r in rows),
         "row_count": len(rows),
+        "distinct_sites": distinct_sites,
+        "site_auto_confirmed": has_rows and len(distinct_sites) <= 1,
     }
 
 

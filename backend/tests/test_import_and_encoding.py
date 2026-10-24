@@ -204,6 +204,39 @@ def test_site_groups_default_and_mutex(client):
     assert canoas["together"] is True
 
 
+def _import_rows(client, tid, sites):
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["箱号", "长", "宽", "高", "体积", "OUTCASE", "PackMatls", "箱重", "净重", "毛重", "PN", "备注", "Site", "集装箱号", "关单号", "DN", "尺寸"])
+    for idx, site in enumerate(sites, start=1):
+        ws.append([idx, 10, 10, 10, 0.001, "A", "BOX", 1, 1, 2, None, None, site, None, None, "DN1", None])
+    buf = BytesIO()
+    wb.save(buf)
+    return client.post(
+        f"/api/tasks/{tid}/import",
+        files={"file": ("sites.xlsx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    ).json()["data"]
+
+
+def test_preview_payload_reports_site_auto_confirmation(client):
+    tid = _create_task(client)
+    body = _import_rows(client, tid, ["S1", "S1", ""])
+    assert body["distinct_sites"] == ["S1"]
+    assert body["site_auto_confirmed"] is True
+
+    multi = _import_rows(client, tid, ["S1", "S2"])
+    assert multi["distinct_sites"] == ["S1", "S2"]
+    assert multi["site_auto_confirmed"] is False
+
+    empty = _import_rows(client, tid, ["", ""])
+    assert empty["distinct_sites"] == []
+    assert empty["site_auto_confirmed"] is True
+    groups = client.get(f"/api/tasks/{tid}/site-groups").json()["data"]
+    assert len(groups) == 1
+    assert groups[0]["site"] == ""
+    assert len(groups[0]["items"]) == 2
+
+
 def test_settings_defaults(client):
     data = client.get("/api/settings").json()["data"]
     assert data["manual_limit_kg"] == "30"

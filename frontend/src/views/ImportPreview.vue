@@ -9,6 +9,7 @@ import {
   type ImportRow,
   type ContainerType,
 } from "@/api";
+import StepNav from "@/components/StepNav.vue";
 
 const route = useRoute();
 const tid = ref(Number(route.params.id));
@@ -17,9 +18,12 @@ const preview = ref<ImportPreview | null>(null);
 const types = ref<ContainerType[]>([]);
 const importing = ref(false);
 const error = ref("");
+const modeSaved = ref(false);
+const modeError = ref("");
 const fileInput = ref<HTMLInputElement>();
 const pendingInput = ref<HTMLInputElement>();
 const hasMode = ref(false);
+const showGuide = ref(route.query.guide === "1");
 
 // mode: "fixed" | "freemix"
 const mode = ref<"fixed" | "freemix">("fixed");
@@ -32,6 +36,15 @@ const freemixQtyLock = ref<Record<string, string>>({});
 const freemixMaxQty = ref<Record<string, string>>({});
 
 const missing = computed(() => preview.value?.missing || []);
+const stepDone = computed(() => {
+  const done: number[] = [];
+  if ((preview.value?.row_count || 0) > 0 && hasMode.value) done.push(1);
+  if (preview.value?.site_auto_confirmed) done.push(2);
+  return done;
+});
+const canContinue = computed(
+  () => (preview.value?.row_count || 0) > 0 && hasMode.value,
+);
 const shownRows = computed(() => {
   const rows = preview.value?.rows || [];
   if (missing.value.length && rows.length > 60) {
@@ -99,16 +112,28 @@ async function onFileSelected() {
 }
 
 async function saveContainerMode() {
+  modeError.value = "";
+  modeSaved.value = false;
   let payload: Record<string, unknown>;
   if (mode.value === "fixed") {
     const count = Number(fixedCount.value);
-    if (!fixedType.value || Number.isNaN(count) || count < 1) return;
+    if (!fixedType.value) {
+      modeError.value = "请选择一种箱型。";
+      return;
+    }
+    if (Number.isNaN(count) || count < 1) {
+      modeError.value = "箱型数量需为大于 0 的整数。";
+      return;
+    }
     payload = { mode: "fixed", fixed: { [fixedType.value]: count } };
   } else {
     const typeLock = Object.entries(freemixTypeLock.value)
       .filter(([, v]) => v)
       .map(([k]) => k);
-    if (typeLock.length === 0) return;
+    if (typeLock.length === 0) {
+      modeError.value = "请至少勾选一种允许参与搜索的箱型。";
+      return;
+    }
     const qtyLock: Record<string, number> = {};
     for (const [k, v] of Object.entries(freemixQtyLock.value)) {
       const n = Number(v);
@@ -126,11 +151,16 @@ async function saveContainerMode() {
       max_qty: maxQty,
     };
   }
-  await Tasks.update(tid.value, {
-    container_mode_json: JSON.stringify(payload),
-  });
-  hasMode.value = true;
-  error.value = "";
+  try {
+    await Tasks.update(tid.value, {
+      container_mode_json: JSON.stringify(payload),
+    });
+    hasMode.value = true;
+    modeSaved.value = true;
+    error.value = "";
+  } catch (e) {
+    modeError.value = (e as Error).message;
+  }
 }
 
 function downloadPending() {
@@ -166,9 +196,11 @@ onMounted(load);
 
 <template>
   <div class="page">
+    <StepNav :task-id="tid" :current="1" :done="stepDone" />
+
     <div class="top">
       <div>
-        <h1>导入预览</h1>
+        <h1>导入与箱型</h1>
         <p class="sub" v-if="preview">
           共 {{ preview.row_count }} 行 · 缺失 {{ missing.length }} 项
           <span v-if="preview.can_compute" class="badge ok">可计算</span>
@@ -176,7 +208,7 @@ onMounted(load);
         </p>
       </div>
       <div class="actions">
-        <router-link to="/tasks" class="ghost">返回</router-link>
+        <router-link to="/tasks" class="ghost">返回任务列表</router-link>
         <button @click="downloadPending" :disabled="!preview?.row_count">下载待填规格</button>
         <a class="link" href="/api/tasks/sample.xlsx" target="_blank">下载示例表</a>
       </div>
@@ -184,78 +216,22 @@ onMounted(load);
 
     <p v-if="error" class="error">{{ error }}</p>
 
-    <section class="section">
-      <h2>箱型设置</h2>
-
-      <!-- mode toggle -->
-      <div class="mode-toggle">
-        <label :class="{ active: mode === 'fixed' }">
-          <input type="radio" value="fixed" v-model="mode" /> 固定箱型
-        </label>
-        <label :class="{ active: mode === 'freemix' }">
-          <input type="radio" value="freemix" v-model="mode" /> 自由组合
-        </label>
+    <div v-if="showGuide" class="guide-bar">
+      <div class="guide-text">
+        <strong>新任务配置指引</strong>
+        <span>按顺序完成：导入数据 → 设置箱型 → 检查导入结果 → 补齐缺失规格 → Site 确认 → 规则 → 计算。</span>
       </div>
+      <button class="guide-close" @click="showGuide = false">知道了</button>
+    </div>
 
-      <!-- fixed: single type + count -->
-      <div v-if="mode === 'fixed'" class="mode-body">
-        <div class="hint">选择一种箱型与数量。</div>
-        <div class="form-row" style="margin-top: 8px">
-          <select v-model="fixedType">
-            <option value="">选择箱型</option>
-            <option v-for="t in types" :key="t.id" :value="t.code">
-              {{ t.code }} — {{ t.name }}
-            </option>
-          </select>
-          <input type="number" v-model.number="fixedCount" min="1" class="count" />
+    <section class="section">
+      <div class="section-head">
+        <span class="step-badge">1</span>
+        <div>
+          <h2>导入文件</h2>
+          <p class="section-hint">支持 xlsx / xls / csv，长宽高按 cm 导入并自动换算为 mm。</p>
         </div>
       </div>
-
-      <!-- freemix: type lock + qty lock + max -->
-      <div v-if="mode === 'freemix'" class="mode-body">
-        <div class="hint">勾选允许参与搜索的箱型；可对某些箱型锁数量或设数量上限。</div>
-        <table class="mode-tbl">
-          <thead>
-            <tr>
-              <th>勾选</th>
-              <th>箱型</th>
-              <th>数量锁定</th>
-              <th>数量上限</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="t in types" :key="t.id">
-              <td><input type="checkbox" v-model="freemixTypeLock[t.code]" /></td>
-              <td>{{ t.code }}</td>
-              <td>
-                <input
-                  v-model="freemixQtyLock[t.code]"
-                  placeholder="—"
-                  class="lock-input"
-                />
-              </td>
-              <td>
-                <input
-                  v-model="freemixMaxQty[t.code]"
-                  placeholder="—"
-                  class="lock-input"
-                />
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="form-row" style="margin-top: 10px">
-        <button class="primary" @click="saveContainerMode" :disabled="importing">
-          应用箱型设置
-        </button>
-      </div>
-      <p v-if="!hasMode" class="hint">计算前需先设置箱型。</p>
-    </section>
-
-    <section class="section">
-      <h2>导入文件</h2>
       <div class="form-row">
         <input
           type="file"
@@ -281,47 +257,152 @@ onMounted(load);
     </section>
 
     <section class="section">
-      <h2>列映射（A–Q）</h2>
-      <table class="map-tbl">
-        <thead>
-          <tr>
-            <th v-for="c in IMPORT_COLUMNS" :key="c.code">{{ c.code }} {{ c.label }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="r in shownRows" :key="r.id" :class="{ incomplete: !r.complete }">
-            <td v-for="c in IMPORT_COLUMNS" :key="c.code">
-              <template v-if="c.code === 'N'">
-                <span class="na">…</span>
-              </template>
-              <template v-else>{{ cellText(r, c.key) }}</template>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="section-head">
+        <span class="step-badge">2</span>
+        <div>
+          <h2>设置箱型</h2>
+          <p class="section-hint">固定箱型适合单一柜型；自由组合可勾选多种箱型参与搜索。</p>
+        </div>
+      </div>
+
+      <div class="mode-toggle">
+        <label :class="{ active: mode === 'fixed' }">
+          <input type="radio" value="fixed" v-model="mode" /> 固定箱型
+        </label>
+        <label :class="{ active: mode === 'freemix' }">
+          <input type="radio" value="freemix" v-model="mode" /> 自由组合
+        </label>
+      </div>
+
+      <div v-if="mode === 'fixed'" class="mode-body">
+        <div class="hint">选择一种箱型并填写数量。</div>
+        <div class="form-row" style="margin-top: 8px">
+          <select v-model="fixedType">
+            <option value="">选择箱型</option>
+            <option v-for="t in types" :key="t.id" :value="t.code">
+              {{ t.code }} — {{ t.name }}
+            </option>
+          </select>
+          <input type="number" v-model.number="fixedCount" min="1" class="count" />
+        </div>
+      </div>
+
+      <div v-if="mode === 'freemix'" class="mode-body">
+        <div class="hint">勾选允许参与搜索的箱型；可对某些箱型锁数量或设数量上限。</div>
+        <div class="table-wrap">
+          <table class="mode-tbl">
+            <thead>
+              <tr>
+                <th>勾选</th>
+                <th>箱型</th>
+                <th>数量锁定</th>
+                <th>数量上限</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="t in types" :key="t.id">
+                <td><input type="checkbox" v-model="freemixTypeLock[t.code]" /></td>
+                <td>{{ t.code }}</td>
+                <td>
+                  <input
+                    v-model="freemixQtyLock[t.code]"
+                    placeholder="—"
+                    class="lock-input"
+                  />
+                </td>
+                <td>
+                  <input
+                    v-model="freemixMaxQty[t.code]"
+                    placeholder="—"
+                    class="lock-input"
+                  />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="form-row" style="margin-top: 10px">
+        <button class="primary" @click="saveContainerMode" :disabled="importing">
+          应用箱型设置
+        </button>
+        <span v-if="modeSaved" class="ok-text">箱型设置已保存</span>
+      </div>
+      <p v-if="modeError" class="error inline">{{ modeError }}</p>
+      <p v-else-if="!hasMode" class="hint">计算前需先设置箱型。</p>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <span class="step-badge">3</span>
+        <div>
+          <h2>检查导入结果</h2>
+          <p class="section-hint">N 列导入时忽略；不完整行会标黄，便于快速定位。</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="map-tbl">
+          <thead>
+            <tr>
+              <th v-for="c in IMPORT_COLUMNS" :key="c.code">{{ c.code }} {{ c.label }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="r in shownRows" :key="r.id" :class="{ incomplete: !r.complete }">
+              <td v-for="c in IMPORT_COLUMNS" :key="c.code">
+                <template v-if="c.code === 'N'">
+                  <span class="na">…</span>
+                </template>
+                <template v-else>{{ cellText(r, c.key) }}</template>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <p v-if="shownRows.length < (preview?.rows.length || 0)" class="hint">
         仅显示不完整行（前 60 行），完整行已省略。
       </p>
     </section>
 
     <section class="section">
-      <h2>缺失 PN / PackMatls</h2>
-      <table v-if="missing.length" class="tbl">
-        <thead>
-          <tr>
-            <th>PN</th>
-            <th>PackMatls</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="(m, i) in missing" :key="i">
-            <td>{{ m.pn || "—" }}</td>
-            <td>{{ m.packmatls || "—" }}</td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="section-head">
+        <span class="step-badge">4</span>
+        <div>
+          <h2>补齐缺失规格</h2>
+          <p class="section-hint">缺失 PN / PackMatls 的行无法参与计算。</p>
+        </div>
+      </div>
+      <div class="table-wrap" v-if="missing.length">
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>PN</th>
+              <th>PackMatls</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(m, i) in missing" :key="i">
+              <td>{{ m.pn || "—" }}</td>
+              <td>{{ m.packmatls || "—" }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <p v-else class="ok-text">所有规格已补全，可以开始计算。</p>
     </section>
+
+    <div class="next-bar">
+      <span>{{ canContinue ? "数据与箱型已就绪。" : "完成导入与箱型设置后可继续。" }}</span>
+      <router-link
+        v-if="canContinue"
+        :to="`/tasks/${tid}/site`"
+        class="next-btn"
+      >
+        下一步：Site 确认
+      </router-link>
+      <span v-else class="next-btn disabled">下一步：Site 确认</span>
+    </div>
   </div>
 </template>
 
@@ -332,6 +413,19 @@ h1 { font-size: 22px; font-weight: 500; color: #2c2c2c; margin: 0; }
 .sub { font-size: 13px; color: #888; margin: 6px 0 0; display: flex; align-items: center; gap: 8px; }
 .actions { display: flex; gap: 8px; align-items: center; }
 .section { margin-top: 28px; }
+.section-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+.step-badge { flex: none; width: 22px; height: 22px; border-radius: 50%; background: #eef5f0; color: #1a5c38; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+.section-head h2 { margin: 0; }
+.section-hint { font-size: 12px; color: #888; margin: 4px 0 0; line-height: 1.5; }
+.guide-bar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 14px 16px; border: 1px solid #d9e8df; background: #f4f9f6; border-radius: 8px; margin-bottom: 8px; }
+.guide-text { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #436652; line-height: 1.6; }
+.guide-text strong { font-size: 13px; color: #1a5c38; }
+.guide-close { flex: none; padding: 4px 12px; border: 1px solid #b9d2c4; border-radius: 4px; background: #fff; color: #1a5c38; font-size: 12px; cursor: pointer; }
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.next-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 32px; padding: 14px 16px; border: 1px solid #e8e4e0; background: #fff; border-radius: 8px; font-size: 13px; color: #555; }
+.next-btn { flex: none; padding: 7px 16px; border-radius: 4px; background: #1a5c38; color: #fff; text-decoration: none; font-size: 13px; }
+.next-btn:hover { text-decoration: none; opacity: 0.9; }
+.next-btn.disabled { background: #e8e4e0; color: #999; }
 h2 { font-size: 16px; font-weight: 500; color: #444; margin: 0 0 12px; }
 .form-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .form-row select { padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
@@ -349,8 +443,9 @@ a.link:hover { text-decoration: underline; }
 .badge.no { background: #fde8e8; color: #c62828; }
 .hint { font-size: 13px; color: #888; margin: 8px 0 0; }
 .error { color: #c62828; font-size: 13px; margin: 0 0 8px; }
+.error.inline { margin: 8px 0 0; }
 .ok-text { font-size: 14px; color: #1a5c38; margin: 0; }
-.map-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+.map-tbl { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 1080px; }
 .map-tbl th { text-align: left; color: #888; font-weight: 500; padding: 6px 8px; border-bottom: 1px solid #e8e4e0; white-space: nowrap; }
 .map-tbl td { padding: 6px 8px; color: #333; border-bottom: 1px solid #f0ede8; white-space: nowrap; }
 .map-tbl tr.incomplete td { background: #fff8e1; }
@@ -369,7 +464,7 @@ a.link:hover { text-decoration: underline; }
   border: 1px solid #e8e4e0; border-radius: 6px;
   padding: 12px 16px; background: #faf8f6;
 }
-.mode-tbl { width: 100%; border-collapse: collapse; margin-top: 8px; }
+.mode-tbl { width: 100%; border-collapse: collapse; margin-top: 8px; min-width: 520px; }
 .mode-tbl th {
   text-align: left; font-size: 13px; color: #888; font-weight: 500;
   padding: 6px 10px; border-bottom: 1px solid #e8e4e0;
@@ -379,7 +474,21 @@ a.link:hover { text-decoration: underline; }
   width: 60px; padding: 4px 8px;
   border: 1px solid #ccc; border-radius: 4px; font-size: 14px;
 }
-.tbl { width: 100%; border-collapse: collapse; }
+.tbl { width: 100%; border-collapse: collapse; min-width: 360px; }
 .tbl th { text-align: left; font-size: 13px; color: #888; font-weight: 500; padding: 8px 10px; border-bottom: 1px solid #e8e4e0; }
 .tbl td { padding: 8px 10px; font-size: 14px; color: #333; border-bottom: 1px solid #f0ede8; }
+
+@media (max-width: 900px) {
+  .page { padding: 24px 24px 40px; }
+  .top { flex-direction: column; gap: 12px; }
+}
+
+@media (max-width: 720px) {
+  .page { padding: 16px 16px 32px; }
+  .actions { flex-wrap: wrap; }
+  .guide-bar { flex-direction: column; gap: 10px; }
+  .guide-close { align-self: flex-start; }
+  .next-bar { flex-direction: column; align-items: stretch; gap: 10px; }
+  .next-btn { text-align: center; }
+}
 </style>

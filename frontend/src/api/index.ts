@@ -223,9 +223,11 @@ export interface ImportRow {
 
 export interface ImportPreview {
   rows: ImportRow[];
-  missing: Array<{ pn: string; packmatls: string }>;
+  missing: Array<{ pn: string | null; packmatls: string | null; row_no: number | null }>;
   can_compute: boolean;
   row_count: number;
+  distinct_sites?: string[];
+  site_auto_confirmed?: boolean;
 }
 
 // ---- site groups
