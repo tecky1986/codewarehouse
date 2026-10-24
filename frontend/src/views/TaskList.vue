@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from "vue";
+import { useRouter } from "vue-router";
 import { Tasks, type Task } from "@/api";
 
+const router = useRouter();
 const tasks = ref<Task[]>([]);
 const newTaskName = ref("");
 const loading = ref(false);
+const creating = ref(false);
 const error = ref("");
 
 const modeLabel = computed(() => (t: Task) => {
@@ -45,10 +48,18 @@ async function load() {
 
 async function createTask() {
   const name = newTaskName.value.trim();
-  if (!name) return;
-  await Tasks.create(name);
-  newTaskName.value = "";
-  await load();
+  if (!name || creating.value) return;
+  creating.value = true;
+  error.value = "";
+  try {
+    const task = await Tasks.create(name);
+    newTaskName.value = "";
+    await router.push(`/tasks/${task.id}/import?guide=1`);
+  } catch (e) {
+    error.value = (e as Error).message;
+  } finally {
+    creating.value = false;
+  }
 }
 
 async function removeTask(t: Task) {
@@ -63,47 +74,54 @@ onMounted(load);
 <template>
   <div class="page">
     <div class="top">
-      <h1>任务</h1>
+      <div>
+        <h1>任务</h1>
+        <p class="sub">新建后按「导入数据 → 设置箱型 → Site 确认 → 规则 → 计算」逐步完成。</p>
+      </div>
       <div class="create-row">
         <input
           v-model="newTaskName"
           placeholder="新任务名称"
           @keyup.enter="createTask"
         />
-        <button class="primary" @click="createTask" :disabled="!newTaskName.trim()">
-          新建
+        <button class="primary" @click="createTask" :disabled="!newTaskName.trim() || creating">
+          {{ creating ? "创建中…" : "新建并配置" }}
         </button>
       </div>
     </div>
 
     <p v-if="error" class="error">{{ error }}</p>
 
-    <table v-if="tasks.length" class="tbl">
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>名称</th>
-          <th>箱型</th>
-          <th>创建</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="t in tasks" :key="t.id">
-          <td>{{ t.id }}</td>
-          <td>
-            <router-link :to="`/tasks/${t.id}`">{{ t.name }}</router-link>
-          </td>
-          <td>{{ modeLabel(t) }}</td>
-          <td>{{ t.created_at ? t.created_at.replace("T", " ").slice(0, 16) : "" }}</td>
-          <td class="ops">
-            <button @click="removeTask(t)" class="danger">删除</button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <div v-if="tasks.length" class="table-wrap">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>名称</th>
+            <th>箱型</th>
+            <th>创建</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="t in tasks" :key="t.id">
+            <td>{{ t.id }}</td>
+            <td>
+              <router-link :to="`/tasks/${t.id}`">{{ t.name }}</router-link>
+            </td>
+            <td>{{ modeLabel(t) }}</td>
+            <td>{{ t.created_at ? t.created_at.replace("T", " ").slice(0, 16) : "" }}</td>
+            <td class="ops">
+              <button @click="removeTask(t)" class="danger">删除</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
-    <p v-else-if="!loading" class="empty">暂无任务，请新建。</p>
+    <p v-else-if="!loading" class="empty">
+      暂无任务。输入名称后点击「新建并配置」，会直接进入导入向导。
+    </p>
     <p v-if="loading" class="loading">加载中…</p>
   </div>
 </template>
@@ -111,14 +129,15 @@ onMounted(load);
 <style scoped>
 .page {
   padding: 32px 40px;
-  max-width: 900px;
+  max-width: 960px;
   margin: 0 auto;
 }
 
 .top {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: 16px;
   margin-bottom: 24px;
 }
 
@@ -129,9 +148,17 @@ h1 {
   margin: 0;
 }
 
+.sub {
+  font-size: 13px;
+  color: #888;
+  margin: 6px 0 0;
+  line-height: 1.5;
+}
+
 .create-row {
   display: flex;
   gap: 8px;
+  flex: none;
 }
 
 .create-row input {
@@ -160,6 +187,13 @@ button.primary:disabled {
 .tbl {
   width: 100%;
   border-collapse: collapse;
+  min-width: 640px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 8px;
 }
 
 .tbl th {
@@ -217,5 +251,30 @@ a:hover {
   color: #c62828;
   font-size: 13px;
   margin: 0;
+}
+
+@media (max-width: 720px) {
+  .page {
+    padding: 20px 16px 32px;
+  }
+
+  .top {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .create-row {
+    width: 100%;
+  }
+
+  .create-row input {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+  }
+
+  .create-row button.primary {
+    flex: none;
+  }
 }
 </style>

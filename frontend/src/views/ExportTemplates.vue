@@ -188,7 +188,7 @@ button.primary:disabled { opacity: 0.5; }
 .field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #555; margin-bottom: 10px; }
 .field input { padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
 .cols { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
-.col-row { display: flex; gap: 6px; align-items: center; }
+.col-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .col-row .fld { flex: 2; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
 .col-row .hdr { flex: 2; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
 .col-row .w { width: 70px; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
@@ -208,4 +208,16 @@ button.primary:disabled { opacity: 0.5; }
 .col-preview { display: flex; flex-wrap: wrap; gap: 6px; }
 .col-chip { font-size: 12px; padding: 2px 8px; background: #f5f3f0; border-radius: 3px; color: #555; }
 .empty { color: #999; font-size: 14px; padding: 24px 0; text-align: center; }
+
+@media (max-width: 900px) {
+  .page { padding: 24px 24px 40px; }
+  .top { flex-direction: column; gap: 12px; }
+}
+
+@media (max-width: 720px) {
+  .page { padding: 16px 16px 32px; }
+  .card-head { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .col-row .fld,
+  .col-row .hdr { flex: 1 1 120px; }
+}
 </style>
