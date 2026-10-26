@@ -53,6 +53,7 @@ Entries discovered by the Agent during task execution should follow this format:
   - The local Linux `dist/container_packing` bundle can still be used for smoke/regression verification of the same frozen startup and API flow.
   - `build_windows.sh` now supports repacking an existing Windows bundle into a local dated zip via `CP_WINDOWS_PACKAGE=/tmp/win_v021.zip ./build_windows.sh`.
   - Repacking verifies the zip and PE header, but it does not regenerate the `.exe` from the latest source.
+  - If the latest Windows artifact already exists as a GitHub artifact for the current HEAD, download it and repackage it locally instead of attempting a local Windows PyInstaller build.
 
 
 

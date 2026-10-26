@@ -20,3 +20,4 @@ build/
 dist/
 # Desktop release artifacts are produced by CI; keep them out of git
 release/
+container-packing-windows-x64-*.zip
