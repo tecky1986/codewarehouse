@@ -205,5 +205,5 @@ def put_site_groups(tid: int, body: Any = Body(...), conn=Depends(get_conn)):
     for g in groups:
         if g.get("together") and g.get("separate"):
             return fail("E_VALIDATION", "同一 Site 不能同时同柜与分离", status=422)
-    TaskRepo(conn).update(tid, {"site_groups_json": groups})
+    TaskRepo(conn).update(tid, {"site_groups_json": groups, "status": "configuring"})
     return ok(groups)

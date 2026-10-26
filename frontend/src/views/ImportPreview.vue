@@ -45,6 +45,18 @@ const stepDone = computed(() => {
 const canContinue = computed(
   () => (preview.value?.row_count || 0) > 0 && hasMode.value,
 );
+const skipSite = computed(() => !!preview.value?.site_auto_confirmed);
+const nextPath = computed(() =>
+  skipSite.value ? `/tasks/${tid.value}/rules` : `/tasks/${tid.value}/site`,
+);
+const nextLabel = computed(() =>
+  skipSite.value ? "下一步：规则配置" : "下一步：Site 确认",
+);
+const nextHint = computed(() => {
+  if (!canContinue.value) return "完成导入与箱型设置后可继续。";
+  if (skipSite.value) return "数据只有 1 个 Site（或未填 Site），已自动跳过 Site 确认。";
+  return "数据与箱型已就绪。";
+});
 const shownRows = computed(() => {
   const rows = preview.value?.rows || [];
   if (missing.value.length && rows.length > 60) {
@@ -219,7 +231,7 @@ onMounted(load);
     <div v-if="showGuide" class="guide-bar">
       <div class="guide-text">
         <strong>新任务配置指引</strong>
-        <span>按顺序完成：导入数据 → 设置箱型 → 检查导入结果 → 补齐缺失规格 → Site 确认 → 规则 → 计算。</span>
+        <span>按顺序完成：导入数据 → 设置箱型 → 检查导入结果 → 补齐缺失规格 → Site 确认（单 Site 自动跳过） → 规则 → 计算。</span>
       </div>
       <button class="guide-close" @click="showGuide = false">知道了</button>
     </div>
@@ -393,15 +405,15 @@ onMounted(load);
     </section>
 
     <div class="next-bar">
-      <span>{{ canContinue ? "数据与箱型已就绪。" : "完成导入与箱型设置后可继续。" }}</span>
+      <span>{{ nextHint }}</span>
       <router-link
         v-if="canContinue"
-        :to="`/tasks/${tid}/site`"
+        :to="nextPath"
         class="next-btn"
       >
-        下一步：Site 确认
+        {{ nextLabel }}
       </router-link>
-      <span v-else class="next-btn disabled">下一步：Site 确认</span>
+      <span v-else class="next-btn disabled">{{ nextLabel }}</span>
     </div>
   </div>
 </template>

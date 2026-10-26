@@ -14,6 +14,7 @@ import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 import webbrowser
@@ -29,10 +30,6 @@ def _resource_dir() -> str:
     """
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
-        base = Path(meipass)
-        for candidate in (base / "_internal", base):
-            if (candidate / "backend" / "app").is_dir():
-                return str(candidate)
         return meipass
     return os.path.dirname(os.path.abspath(__file__))
 
@@ -71,8 +68,9 @@ def wait_for_http(port: int, timeout: float = 30.0) -> bool:
 def _setup_env(port: int) -> None:
     os.environ["CP_DATA_DIR"] = DATA_DIR
     os.environ["CP_PORT"] = str(port)
-    sys.path.insert(0, BACKEND_DIR)
-    os.chdir(BACKEND_DIR)
+    if not getattr(sys, "frozen", False):
+        sys.path.insert(0, BACKEND_DIR)
+        os.chdir(BACKEND_DIR)
 
 
 def _run_frozen(port: int) -> None:
@@ -82,6 +80,12 @@ def _run_frozen(port: int) -> None:
     from app.main import app  # noqa: E402
 
     print(f"[start] running in-process on port {port}")
+
+    def _open_browser():
+        if wait_for_http(port):
+            webbrowser.open(f"http://127.0.0.1:{port}")
+
+    threading.Thread(target=_open_browser, daemon=True).start()
     config = uvicorn.Config(
         app,
         host="127.0.0.1",

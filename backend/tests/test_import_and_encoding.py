@@ -202,6 +202,8 @@ def test_site_groups_default_and_mutex(client):
     again = client.get(f"/api/tasks/{tid}/site-groups").json()["data"]
     canoas = next(g for g in again if g["site"] == "Canoas")
     assert canoas["together"] is True
+    task = client.get(f"/api/tasks/{tid}").json()["data"]
+    assert task["status"] == "configuring"
 
 
 def _import_rows(client, tid, sites):

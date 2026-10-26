@@ -186,6 +186,11 @@ class JobsService:
                 ),
             )
             run_id = cur.lastrowid
+            self.conn.execute(
+                "UPDATE task SET status = 'computing' WHERE id = ?",
+                (tid,),
+            )
+            self.conn.commit()
 
         job = JobState(run_id=run_id, task_id=tid, algorithms=algorithms)
         with _REGISTRY_LOCK:
@@ -382,6 +387,10 @@ class JobsService:
                 "UPDATE packing_run SET status = ? WHERE id = ?",
                 ("done" if not timed_out else "done", job.run_id),
             )
+            self.conn.execute(
+                "UPDATE task SET status = 'completed' WHERE id = ?",
+                (job.task_id,),
+            )
             self.conn.commit()
 
         with _REGISTRY_LOCK:
@@ -392,6 +401,10 @@ class JobsService:
         with _WRITE_LOCK:
             self.conn.execute(
                 "UPDATE packing_run SET status = 'failed' WHERE id = ?", (job.run_id,)
+            )
+            self.conn.execute(
+                "UPDATE task SET status = 'failed' WHERE id = ?",
+                (job.task_id,),
             )
             self.conn.commit()
         with _REGISTRY_LOCK:

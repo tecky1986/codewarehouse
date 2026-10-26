@@ -3,12 +3,11 @@ name: Windows executable
 on:
   workflow_dispatch:
   push:
-    paths:
-      - "container_packing.spec"
-      - "start.py"
-      - "backend/**"
-      - "frontend/**"
-      - ".github/workflows/windows-build.yml"
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -47,17 +46,37 @@ jobs:
       - name: Package Windows application
         run: python -m PyInstaller container_packing.spec --clean -y
 
-      - name: Verify executable
+      - name: Strip Python sources and zip
         shell: pwsh
         run: |
           if (-not (Test-Path dist/container_packing/container_packing.exe)) {
             throw "PyInstaller did not produce the expected executable."
           }
+          Get-ChildItem dist/container_packing -Recurse -Include *.py,*.pyi,*.pyx | Remove-Item -Force
+          @"
+          集装箱装箱工具 Windows 版
 
-      - name: Upload distributable
+          1. 解压本压缩包
+          2. 双击 container_packing.exe
+          3. 浏览器会自动打开本地页面（数据保存在 %USERPROFILE%\.container-packing）
+
+          本包不含 Python 源码，请勿移动 _internal 目录。
+          "@ | Set-Content -Encoding UTF8 dist/container_packing/使用说明.txt
+          Compress-Archive -Path dist/container_packing -DestinationPath container-packing-windows-x64.zip -Force
+
+      - name: Upload zip artifact
         uses: actions/upload-artifact@v4
         with:
-          name: container-packing-windows-${{ github.sha }}
-          path: dist/container_packing/
+          name: container-packing-windows-x64
+          path: container-packing-windows-x64.zip
           if-no-files-found: error
           retention-days: 14
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: container-packing-windows-x64.zip
+          generate_release_notes: true
+          body: |
+            Windows 可执行包（不含源码）。解压后运行 `container_packing.exe`。

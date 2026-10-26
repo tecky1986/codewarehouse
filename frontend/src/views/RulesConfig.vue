@@ -69,6 +69,7 @@ async function save() {
   try {
     await Tasks.update(tid.value, {
       rules_json: JSON.stringify(enabled),
+      status: "ready",
     });
     task.value!.rules_json = JSON.stringify(enabled);
     rulesSavedOnce.value = true;

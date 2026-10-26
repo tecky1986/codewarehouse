@@ -17,7 +17,12 @@ const conflict = computed(() => groups.value.some((g) => g.together && g.separat
 const stepDoneComputed = computed(
   () => hasPreview.value && (groups.value.length <= 1 || siteAutoConfirmed.value),
 );
-const stepDone = computed(() => (stepDoneComputed.value ? [1] : []));
+const stepDone = computed(() => {
+  const done: number[] = [];
+  if (hasPreview.value) done.push(1);
+  if (stepDoneComputed.value) done.push(2);
+  return done;
+});
 
 async function load() {
   groups.value = await Tasks.siteGroups(tid.value);

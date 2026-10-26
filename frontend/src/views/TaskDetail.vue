@@ -85,6 +85,18 @@ const enabledRules = computed(() => {
 
 const importedCount = computed(() => preview.value?.row_count || 0);
 
+const STATUS_TEXT: Record<string, string> = {
+  draft: "草稿",
+  configuring: "配置中",
+  ready: "待计算",
+  computing: "计算中",
+  completed: "已完成",
+  failed: "失败",
+};
+const statusText = computed(
+  () => STATUS_TEXT[task.value?.status || "draft"] || task.value?.status || "草稿",
+);
+
 const siteConfigured = computed(() => {
   if (preview.value?.site_auto_confirmed) return true;
   const raw = task.value?.site_groups_json;
@@ -191,13 +203,14 @@ async function startCompute() {
     const job = await Tasks.compute(task.value.id, { algorithms: algos.value });
     jobId.value = job.id;
     showJob.value = true;
+    task.value.status = "computing";
   } catch (e) {
     error.value = (e as Error).message;
   }
 }
 
 async function onJobDone(_job: Job) {
-  await loadPlans();
+  await loadTask();
   showJob.value = false;
 }
 
@@ -260,6 +273,7 @@ onMounted(loadTask);
       <div>
         <h1>{{ task.name }}</h1>
         <p class="sub">
+          <span class="status-pill" :class="task.status || 'draft'">{{ statusText }}</span>
           数据 {{ importedCount }} 行 · 方案 {{ plans.length }} 个
           <span v-if="task.created_at">
             · 创建于 {{ task.created_at.replace("T", " ").slice(0, 16) }}
@@ -470,7 +484,7 @@ onMounted(loadTask);
     </section>
 
     <div v-if="!plans.length && !showJob" class="empty">
-      暂无方案。设置箱型后点击「开始计算」。
+      暂无方案。完成配置后点击「开始计算」。
     </div>
   </div>
 
@@ -482,7 +496,13 @@ onMounted(loadTask);
 .page.loading { text-align: center; color: #999; padding-top: 80px; }
 .top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; }
 h1 { font-size: 22px; font-weight: 500; color: #2c2c2c; margin: 0; }
-.sub { font-size: 13px; color: #888; margin: 6px 0 0; }
+.sub { font-size: 13px; color: #888; margin: 6px 0 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.status-pill { font-size: 12px; padding: 1px 8px; border-radius: 10px; background: #f0ede8; color: #666; }
+.status-pill.configuring { background: #eef5f0; color: #1a5c38; }
+.status-pill.ready { background: #fff8e1; color: #8a6d1b; }
+.status-pill.computing { background: #e8f0fe; color: #1a4a8c; }
+.status-pill.completed { background: #e8f5e9; color: #1a5c38; }
+.status-pill.failed { background: #fde8e8; color: #c62828; }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .guide-card { border: 1px solid #e8e4e0; border-radius: 10px; background: #fff; padding: 16px 20px; margin-bottom: 20px; }
 .guide-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }

@@ -10,6 +10,19 @@ const loading = ref(false);
 const creating = ref(false);
 const error = ref("");
 
+const STATUS_LABEL: Record<string, string> = {
+  draft: "草稿",
+  configuring: "配置中",
+  ready: "待计算",
+  computing: "计算中",
+  completed: "已完成",
+  failed: "失败",
+};
+
+function statusLabel(t: Task): string {
+  return STATUS_LABEL[t.status || "draft"] || t.status || "草稿";
+}
+
 const modeLabel = computed(() => (t: Task) => {
   let m: Record<string, unknown> = {};
   try {
@@ -98,6 +111,7 @@ onMounted(load);
           <tr>
             <th>ID</th>
             <th>名称</th>
+            <th>状态</th>
             <th>箱型</th>
             <th>创建</th>
             <th></th>
@@ -108,6 +122,9 @@ onMounted(load);
             <td>{{ t.id }}</td>
             <td>
               <router-link :to="`/tasks/${t.id}`">{{ t.name }}</router-link>
+            </td>
+            <td>
+              <span class="status" :class="t.status || 'draft'">{{ statusLabel(t) }}</span>
             </td>
             <td>{{ modeLabel(t) }}</td>
             <td>{{ t.created_at ? t.created_at.replace("T", " ").slice(0, 16) : "" }}</td>
@@ -229,6 +246,20 @@ button.primary:disabled {
   color: #c62828;
   border-color: #c62828;
 }
+
+.status {
+  display: inline-block;
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: #f0ede8;
+  color: #666;
+}
+.status.configuring { background: #eef5f0; color: #1a5c38; }
+.status.ready { background: #fff8e1; color: #8a6d1b; }
+.status.computing { background: #e8f0fe; color: #1a4a8c; }
+.status.completed { background: #e8f5e9; color: #1a5c38; }
+.status.failed { background: #fde8e8; color: #c62828; }
 
 a {
   color: #1a5c38;
