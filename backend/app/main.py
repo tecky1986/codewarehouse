@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.staticfiles import StaticFiles
 
 from app.deps import get_conn
@@ -46,6 +47,18 @@ async def unhandled_handler(_request: Request, exc: Exception):
     return fail("E_ENGINE", str(exc), status=500)
 
 
+class SPAStaticFiles(StaticFiles):
+    """Serve index.html for unmatched paths so Vue history routes work in the desktop exe."""
+
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code == 404:
+                return await super().get_response("index.html", scope)
+            raise
+
+
 def _static_dir() -> Path:
     """Resolve the static dir in both source and PyInstaller onedir modes."""
     import sys
@@ -65,4 +78,4 @@ def _static_dir() -> Path:
 
 _STATIC = _static_dir()
 if _STATIC.is_dir():
-    app.mount("/", StaticFiles(directory=str(_STATIC), html=True), name="static")
+    app.mount("/", SPAStaticFiles(directory=str(_STATIC), html=True), name="static")

@@ -23,7 +23,7 @@ const modeError = ref("");
 const fileInput = ref<HTMLInputElement>();
 const pendingInput = ref<HTMLInputElement>();
 const hasMode = ref(false);
-const showGuide = ref(route.query.guide === "1");
+const showGuide = ref(true);
 
 // mode: "fixed" | "freemix"
 const mode = ref<"fixed" | "freemix">("fixed");

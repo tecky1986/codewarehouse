@@ -9,6 +9,7 @@ const tid = ref(Number(route.params.id));
 const groups = ref<SiteGroup[]>([]);
 const hasPreview = ref(false);
 const siteAutoConfirmed = ref(false);
+const showGuide = ref(true);
 const saving = ref(false);
 const saved = ref(false);
 const error = ref("");
@@ -72,6 +73,14 @@ onMounted(load);
         <router-link to="/tasks" class="ghost">返回任务列表</router-link>
         <button class="primary" @click="save" :disabled="saving || conflict || stepDoneComputed">保存</button>
       </div>
+    </div>
+
+    <div v-if="showGuide" class="guide-bar">
+      <div class="guide-text">
+        <strong>配置指引 · 第 2 步</strong>
+        <span>按 Site 选择同柜或分离。只有 1 个 Site（或未填）时本步自动完成，可直接进入规则配置。</span>
+      </div>
+      <button class="guide-close" @click="showGuide = false">知道了</button>
     </div>
 
     <p v-if="error" class="error">{{ error }}</p>
@@ -141,6 +150,10 @@ onMounted(load);
 </template>
 
 <style scoped>
+.guide-bar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 14px 16px; border: 1px solid #d9e8df; background: #f4f9f6; border-radius: 8px; margin-bottom: 16px; }
+.guide-text { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #436652; line-height: 1.6; }
+.guide-text strong { font-size: 13px; color: #1a5c38; }
+.guide-close { flex: none; padding: 4px 12px; border: 1px solid #b9d2c4; border-radius: 4px; background: #fff; color: #1a5c38; font-size: 12px; cursor: pointer; }
 .page { padding: 32px 40px; max-width: 900px; margin: 0 auto; }
 .top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
 h1 { font-size: 22px; font-weight: 500; color: #2c2c2c; margin: 0; }

@@ -23,6 +23,14 @@ function statusLabel(t: Task): string {
   return STATUS_LABEL[t.status || "draft"] || t.status || "草稿";
 }
 
+function taskHref(t: Task): string {
+  const status = t.status || "draft";
+  if (status === "draft") return `/tasks/${t.id}/import?guide=1`;
+  if (status === "configuring") return `/tasks/${t.id}/site?guide=1`;
+  if (status === "ready") return `/tasks/${t.id}#compute`;
+  return `/tasks/${t.id}`;
+}
+
 const modeLabel = computed(() => (t: Task) => {
   let m: Record<string, unknown> = {};
   try {
@@ -121,7 +129,7 @@ onMounted(load);
           <tr v-for="t in tasks" :key="t.id">
             <td>{{ t.id }}</td>
             <td>
-              <router-link :to="`/tasks/${t.id}`">{{ t.name }}</router-link>
+              <router-link :to="taskHref(t)">{{ t.name }}</router-link>
             </td>
             <td>
               <span class="status" :class="t.status || 'draft'">{{ statusLabel(t) }}</span>
@@ -129,6 +137,7 @@ onMounted(load);
             <td>{{ modeLabel(t) }}</td>
             <td>{{ t.created_at ? t.created_at.replace("T", " ").slice(0, 16) : "" }}</td>
             <td class="ops">
+              <router-link :to="taskHref(t)" class="cfg">{{ t.status === "completed" ? "查看" : "继续配置" }}</router-link>
               <button @click="removeTask(t)" class="danger">删除</button>
             </td>
           </tr>
@@ -233,6 +242,22 @@ button.primary:disabled {
   text-align: right;
 }
 
+.ops {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+}
+.ops .cfg {
+  padding: 3px 10px;
+  border: 1px solid #1a5c38;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 12px;
+  color: #1a5c38;
+  text-decoration: none;
+}
+.ops .cfg:hover { background: #eef5f0; text-decoration: none; }
 .ops button {
   padding: 3px 10px;
   border: 1px solid #ccc;

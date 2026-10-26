@@ -9,6 +9,7 @@ const tid = ref(Number(route.params.id));
 const task = ref<Task | null>(null);
 const preview = ref<ImportPreview | null>(null);
 const rulesSavedOnce = ref(false);
+const showGuide = ref(true);
 const saving = ref(false);
 const saved = ref(false);
 const error = ref("");
@@ -106,6 +107,14 @@ onMounted(load);
       </div>
     </div>
 
+    <div v-if="showGuide" class="guide-bar">
+      <div class="guide-text">
+        <strong>配置指引 · 第 3 步</strong>
+        <span>勾选需要的装箱规则并用 ↑↓ 调整优先级，保存后进入计算。</span>
+      </div>
+      <button class="guide-close" @click="showGuide = false">知道了</button>
+    </div>
+
     <p v-if="error" class="error">{{ error }}</p>
     <p v-if="saved" class="ok">已保存</p>
 
@@ -134,6 +143,10 @@ onMounted(load);
 </template>
 
 <style scoped>
+.guide-bar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 14px 16px; border: 1px solid #d9e8df; background: #f4f9f6; border-radius: 8px; margin-bottom: 16px; }
+.guide-text { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #436652; line-height: 1.6; }
+.guide-text strong { font-size: 13px; color: #1a5c38; }
+.guide-close { flex: none; padding: 4px 12px; border: 1px solid #b9d2c4; border-radius: 4px; background: #fff; color: #1a5c38; font-size: 12px; cursor: pointer; }
 .page { padding: 32px 40px; max-width: 700px; margin: 0 auto; }
 .top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
 h1 { font-size: 22px; font-weight: 500; color: #2c2c2c; margin: 0; }
