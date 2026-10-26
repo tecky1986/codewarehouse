@@ -51,9 +51,9 @@ const modeLabel = computed(() => (t: Task) => {
   const entries = Object.entries(fixed);
   if (entries.length) {
     const [code, n] = entries[0];
-    return `${code} × ${n}`;
+    return `${code} ≤ ${n}`;
   }
-  if (m.type_code) return `${m.type_code} × ${m.count ?? 1}`;
+  if (m.type_code) return `${m.type_code} ≤ ${m.count ?? 1}`;
   return "未设置";
 });
 

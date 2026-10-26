@@ -26,6 +26,7 @@ const playing = ref(false);
 const playStep = ref(0);
 const speed = ref<0.5 | 1 | 2 | 4>(1);
 const showAll = ref(false);
+const maximized = ref(false);
 
 let scene: THREE.Scene | null = null;
 let camera: THREE.PerspectiveCamera | null = null;
@@ -110,7 +111,7 @@ function buildScene() {
   loop();
 }
 
-function createBox(p: Placement, L: { l: number; w: number; h: number }) {
+function createBox(p: Placement) {
   const dx = p.dim_x;
   const dy = p.dim_y;
   const dz = p.dim_z;
@@ -121,12 +122,20 @@ function createBox(p: Placement, L: { l: number; w: number; h: number }) {
     transparent: true,
     opacity: 0.85,
   });
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(dx, dz, dy), mat);
 
+  // BoxGeometry signature is (width=dx, height=dz, depth=dy); align axes to
+  // the container outline so the cargo box and the container frame share the
+  // same X/Y/Z orientation. The outline uses (l, h, w) as its dimensions,
+  // so map cargo dim_x -> l, dim_z -> h, dim_y -> w.
+  const geo = new THREE.BoxGeometry(dx, dz, dy);
+  const mesh = new THREE.Mesh(geo, mat);
+
+  // Place the cargo mesh so that dim_x runs along the container's long axis
+  // (l), dim_z along the height axis (h), and dim_y along the width axis (w).
   mesh.position.set(
-    p.z + dy / 2,
-    p.y + dz / 2,
-    L.l - p.x - dx / 2,
+    p.x + dx / 2,
+    p.z + dz / 2,
+    p.y + dy / 2,
   );
 
   mesh.userData.importRowId = p.import_row_id;
@@ -141,6 +150,10 @@ function buildContainer3D() {
 
   const L = dims();
 
+  // The container outline is a box spanning [0,L.l] x [0,L.h] x [0,L.w],
+  // matching the cargo placement coordinate system where dim_x (cargo length)
+  // runs along the container long axis, dim_z (cargo height) along the
+  // vertical axis, and dim_y (cargo width) along the lateral axis.
   const geo = new THREE.BoxGeometry(L.l, L.h, L.w);
   const edges = new THREE.EdgesGeometry(geo);
   const line = new THREE.LineSegments(
@@ -164,7 +177,7 @@ function buildContainer3D() {
     : containerPlacements.value.slice(0, playStep.value + 1);
 
   for (const p of shown) {
-    const mesh = createBox(p, L);
+    const mesh = createBox(p);
     if (mesh) containerGroup.add(mesh);
   }
 
@@ -178,13 +191,16 @@ function centerOnBounds(
   if (!camera || !scene) return;
   const pts: THREE.Vector3[] = [];
   for (const p of placed) {
-    pts.push(new THREE.Vector3(p.z, p.y, L.l - p.x));
+    pts.push(new THREE.Vector3(p.x, p.z, p.y));
   }
   if (pts.length === 0) {
-    pts.push(new THREE.Vector3(L.w / 2, 0, L.l / 2));
+    pts.push(new THREE.Vector3(L.l / 2, L.h / 2, L.w / 2));
   }
   const bb = new THREE.Box3();
   for (const p of pts) bb.expandByPoint(p);
+  // Expand the box by the container dimensions so the camera always fits the
+  // full container outline, not just the placed items.
+  bb.expandByPoint(new THREE.Vector3(L.l, L.h, L.w));
   const center = bb.getCenter(new THREE.Vector3());
   const size = bb.getSize(new THREE.Vector3());
   const maxDim = Math.max(size.x, size.y, size.z, 1000);
@@ -381,7 +397,7 @@ defineExpose({
       </button>
     </div>
 
-    <div class="canvas-wrap">
+    <div class="canvas-wrap" :class="{ maximized }">
       <canvas ref="canvasEl" class="canvas"></canvas>
       <div v-if="!active" class="empty">暂无集装箱</div>
     </div>
@@ -414,6 +430,9 @@ defineExpose({
         <input type="checkbox" v-model="showAll" @change="rebuild" />
         全部
       </label>
+      <button @click="maximized = !maximized" :class="{ 'max-btn': true, active: maximized }" :title="maximized ? '退出最大化' : '最大化'" class="max-btn">
+        {{ maximized ? "还原" : "最大化" }}
+      </button>
     </div>
 
     <div v-if="selected" class="sel-info">
@@ -463,6 +482,27 @@ defineExpose({
   border-radius: 6px;
   overflow: hidden;
   background: #f5f3f0;
+}
+
+.canvas-wrap.maximized {
+  height: calc(100vh - 220px);
+  min-height: 420px;
+}
+
+.max-btn {
+  padding: 4px 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  color: #555;
+}
+
+.max-btn.active {
+  background: #1a5c38;
+  color: #fff;
+  border-color: #1a5c38;
 }
 
 .canvas {

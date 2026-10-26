@@ -145,6 +145,96 @@ def test_chinese_header_roundtrip_and_pending_filename(client):
     assert "PackMatls" in headers
 
 
+def test_packmatls_match_requires_dual_fields(client):
+    # a master record that owns a different PN must not fill a PN-less row,
+    # even if the packing material matches (packmatls-only lookup)
+    client.post(
+        "/api/packages",
+        json={
+            "pn": "OTHER-PN",
+            "name": "OUTCASE(VEN)",
+            "package_type": "OUTCASE(VEN)",
+            "l": 500,
+            "w": 500,
+            "h": 500,
+            "tare": 1,
+            "net": 2,
+            "gross": 3,
+            "enabled": 1,
+        },
+    )
+    tid = _create_task(client)
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["箱号", "长", "宽", "高", "体积", "OUTCASE", "PackMatls", "箱重", "净重", "毛重", "PN", "备注", "Site"])
+    ws.append([1, None, None, None, None, "A", "OUTCASE(VEN)", 1, 1, 2, None, None, "S1"])
+    buf = BytesIO()
+    wb.save(buf)
+    body = client.post(
+        f"/api/tasks/{tid}/import",
+        files={"file": ("ven.xlsx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    ).json()["data"]
+    row = body["rows"][0]
+    # pn-less row + master with different PN -> no fill, still incomplete
+    assert row["source_flag"] == "table"
+    assert row["complete"] is False
+    assert body["can_compute"] is False
+
+    # now a master record without any PN: dual-field match allows the fill
+    client.post(
+        "/api/packages",
+        json={
+            "name": "OUTCASE(VEN)",
+            "package_type": "OUTCASE(VEN)",
+            "l": 600,
+            "w": 600,
+            "h": 600,
+            "tare": 4,
+            "net": 5,
+            "gross": 6,
+            "enabled": 1,
+        },
+    )
+    rematch = client.post(f"/api/tasks/{tid}/import/re-match").json()["data"]
+    row2 = rematch["rows"][0]
+    assert row2["source_flag"] == "master"
+    assert row2["complete"] is True
+    assert row2["b_len"] == 600
+
+
+def test_packmatls_dual_field_match_when_pn_present(client):
+    # a master record with the same PN and packmatls must fill the row
+    client.post(
+        "/api/packages",
+        json={
+            "pn": "ACW1081490*80",
+            "name": "OUTCASE(VEN)",
+            "package_type": "OUTCASE(VEN)",
+            "l": 1110,
+            "w": 800,
+            "h": 900,
+            "tare": 10,
+            "net": 20,
+            "gross": 30,
+            "enabled": 1,
+        },
+    )
+    tid = _create_task(client)
+    body = client.post(
+        f"/api/tasks/{tid}/import",
+        files={
+            "file": (
+                "Step3Output-1.xlsx",
+                SAMPLE.read_bytes(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+    ).json()["data"]
+    ven = [r for r in body["rows"] if r["k_pn"] == "ACW1081490*80"]
+    assert all(r["complete"] for r in ven)
+    assert ven[0]["source_flag"] == "master"
+
+
 def test_batch_maintain_and_rematch(client):
     tid = _create_task(client)
     client.post(

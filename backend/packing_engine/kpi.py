@@ -16,6 +16,7 @@ def _per_container(c, total_elapsed: float = 0.0) -> dict:
     n = len(items)
     vol_used = sum(p.item.volume_m3() for p in items)
     gross_used = sum(p.item.gross for p in items)
+    freight = float(getattr(c, "freight_price", 0.0) or 0.0)
 
     # load-seq correctness: an item is "in order" when its inner face
     # (x+dx) does not exceed the minimum inner face of earlier items.
@@ -53,6 +54,7 @@ def _per_container(c, total_elapsed: float = 0.0) -> dict:
         "load_seq_correct_ratio": (seq_ok / n) if n else 1.0,
         "constraint_ok_ratio": (ok / n) if n else 1.0,
         "cg_offset_mm": cg_offset,
+        "freight_price": freight,
     }
 
 
@@ -64,6 +66,7 @@ def evaluate(plan: Plan, total_items: int, per_algo_elapsed: Optional[dict] = No
     vol_cap = sum(p["volume_capacity_m3"] for p in per)
     gross_used = sum(p["payload_used_kg"] for p in per)
     gross_cap = sum(p["payload_capacity_kg"] for p in per)
+    total_freight = sum(p.get("freight_price", 0.0) for p in per)
 
     assigned = sum(p["item_count"] for p in per)
     unassigned_items = plan.unassigned or []
@@ -99,6 +102,7 @@ def evaluate(plan: Plan, total_items: int, per_algo_elapsed: Optional[dict] = No
         "unassigned_weight_kg": un_gross,
         "load_seq_correct_ratio": weighted_seq,
         "constraint_ok_ratio": weighted_ok,
+        "total_freight": total_freight,
         "elapsed_s": elapsed,
         "timed_out": bool(plan.timed_out),
     }

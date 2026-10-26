@@ -22,6 +22,7 @@ def _instances_for(types: list[tuple[str, int]], catalog: dict[str, ContainerIns
                     inner_h=proto.inner_h,
                     max_payload=proto.max_payload,
                     volume_m3=proto.volume_m3,
+                    freight_price=getattr(proto, "freight_price", 0.0),
                 )
             )
     return out
@@ -102,7 +103,12 @@ def search(
     site_groups: list,
     reporter: ProgressReporter,
 ) -> tuple[Plan | None, str | None, bool]:
-    """Return (best_plan, error, timed_out)."""
+    """Return (best_plan, error, timed_out).
+
+    Optimization objective: minimize total freight cost among plans that
+    place all items (completion == 1.0).  If no plan places everything,
+    fall back to maximising completion, then minimising container count.
+    """
     catalog_codes = list(catalog.keys())
     lb = lower_bound(items, catalog)
     upper = min(lb + 3, 20)
@@ -111,7 +117,7 @@ def search(
     if not combos:
         return None, "E_NO_FEASIBLE", False
 
-    best: tuple[float, Plan] | None = None
+    best: tuple[tuple, Plan] | None = None
     for combo in combos:
         if reporter.timed_out:
             break
@@ -126,12 +132,17 @@ def search(
         completion = overall["completion"]
         used = overall["containers_used"]
         vol_util = overall["vol_util"]
-        key = (-completion, used, -vol_util)
+        freight = overall.get("total_freight", 0.0)
+        # Primary: fully loaded? Secondary: lowest freight. Tertiary: fewer containers, higher vol util.
+        fully_loaded = 0 if completion >= 1.0 - 1e-9 else 1
+        key = (fully_loaded, freight, used, -vol_util)
         if best is None or key < best[0]:
             best = (key, plan)
         reporter.tick()
 
-    if best is None or best[1].unassigned:
+    if best is None:
         return None, "E_NO_FEASIBLE", reporter.timed_out
     _, plan = best
+    if plan.unassigned:
+        return None, "E_NO_FEASIBLE", reporter.timed_out
     return plan, None, reporter.timed_out

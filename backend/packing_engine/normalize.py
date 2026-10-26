@@ -120,6 +120,7 @@ def fixed_containers(
                 inner_h=int(row["inner_h"]),
                 max_payload=float(row["max_payload"]),
                 volume_m3=float(row.get("volume") or 0),
+                freight_price=float(row.get("freight_price") or 0),
             )
         )
     return out
@@ -151,6 +152,7 @@ def fixed_containers_multi(
                     inner_h=int(row["inner_h"]),
                     max_payload=float(row["max_payload"]),
                     volume_m3=float(row.get("volume") or 0),
+                    freight_price=float(row.get("freight_price") or 0),
                 )
             )
     return out

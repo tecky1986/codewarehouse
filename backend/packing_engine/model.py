@@ -46,6 +46,7 @@ class ContainerInstance:
     max_payload: float
     volume_m3: float
     placed: list = field(default_factory=list)
+    freight_price: float = 0.0
 
     @property
     def used_volume(self) -> float:

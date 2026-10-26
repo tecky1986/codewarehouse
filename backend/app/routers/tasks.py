@@ -139,7 +139,8 @@ def batch_maintain(
         if item.get("pn"):
             existing = pkg.get_by_pn(item["pn"])
         if existing is None and item.get("name"):
-            existing = pkg.get_by_packmatls(item["name"])
+            # dual-field match: packing material + PN (upsert rows always carry both)
+            existing = pkg.get_by_packmatls(item["name"], item.get("pn"))
         if existing:
             saved.append(pkg.update(existing["id"], item))
         else:

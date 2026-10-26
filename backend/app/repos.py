@@ -53,6 +53,7 @@ class ContainerTypeRepo:
             "max_payload",
             "tare_weight",
             "volume",
+            "freight_price",
             "enabled",
             "remark",
         )
@@ -63,6 +64,8 @@ class ContainerTypeRepo:
             values[cols.index("volume")] = _volume_m3(
                 data["inner_l"], data["inner_w"], data["inner_h"]
             )
+        if values[cols.index("freight_price")] is None:
+            values[cols.index("freight_price")] = 0.0
         cur = self.conn.execute(
             f"INSERT INTO container_type ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
             values,
@@ -88,6 +91,7 @@ class ContainerTypeRepo:
             "max_payload",
             "tare_weight",
             "volume",
+            "freight_price",
             "enabled",
             "remark",
         ]
@@ -98,7 +102,7 @@ class ContainerTypeRepo:
             """UPDATE container_type SET
                code=?, name=?, iso_code=?, inner_l=?, inner_w=?, inner_h=?,
                door_w=?, door_h=?, max_payload=?, tare_weight=?, volume=?,
-               enabled=?, remark=? WHERE id=?""",
+               freight_price=?, enabled=?, remark=? WHERE id=?""",
             [merged[k] for k in fields] + [cid],
         )
         self.conn.commit()
@@ -141,13 +145,27 @@ class PackageMasterRepo:
             return None
         return _row(self.conn.execute("SELECT * FROM package_master WHERE pn = ?", (pn,)).fetchone())
 
-    def get_by_packmatls(self, name: str) -> dict | None:
-        if not name:
+    def get_by_packmatls(self, packmatls: str, pn: str | None = None) -> dict | None:
+        """Match by (package_type/name, pn). pn=None means dual-field match:
+        only master records without PN qualify (a row lacking PN can only be
+        filled by a packaging record that itself has no PN)."""
+        if not packmatls:
             return None
+        if pn:
+            return _row(
+                self.conn.execute(
+                    """SELECT * FROM package_master
+                       WHERE package_type = ? AND pn = ? ORDER BY id LIMIT 1""",
+                    (packmatls, pn),
+                ).fetchone()
+            )
         return _row(
             self.conn.execute(
-                "SELECT * FROM package_master WHERE package_type = ? OR name = ? ORDER BY id LIMIT 1",
-                (name, name),
+                """SELECT * FROM package_master
+                   WHERE (package_type = ? OR name = ?)
+                     AND (pn IS NULL OR pn = '')
+                   ORDER BY id LIMIT 1""",
+                (packmatls, packmatls),
             ).fetchone()
         )
 

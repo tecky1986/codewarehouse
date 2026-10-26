@@ -100,11 +100,15 @@ class JobsService:
         """Parse container_mode_json into a normalized spec.
 
         Returns:
-          fixed:  {"mode": "fixed", "specs": [(code, count), ...]}
+          fixed:  {"mode": "fixed", "specs": [(code, count), ...],
+                   "max_qty": {code: n}}
           freemix: {"mode": "freemix", "type_lock": [...],
                     "qty_lock": {code: n}, "max_qty": {code: n}}
 
         Legacy shape {"type_code": "40GP", "count": 2} maps to fixed mode.
+        In fixed mode, the count in `fixed` dict is treated as the upper
+        limit (max_qty) — the engine searches for the best number of
+        containers from 1..max_qty per type.
         """
         raw = task.get("container_mode_json")
         if isinstance(raw, str):
@@ -124,18 +128,24 @@ class JobsService:
 
         # fixed mode (legacy or explicit)
         specs: list[tuple[str, int]] = []
+        max_qty: dict[str, int] = {}
         fixed = raw.get("fixed")
         if isinstance(fixed, dict):
             for code, n in fixed.items():
-                specs.append((code, int(n)))
+                n = int(n)
+                specs.append((code, n))
+                max_qty[code] = n
         elif raw.get("type_code"):
-            specs.append((raw["type_code"], int(raw.get("count", 1))))
+            code = raw["type_code"]
+            n = int(raw.get("count", 1))
+            specs.append((code, n))
+            max_qty[code] = n
         if not specs:
             raise AppError("E_VALIDATION", "固定模式需指定箱型与数量", status=422)
         for code, n in specs:
             if n < 1:
                 raise AppError("E_VALIDATION", f"箱型 {code} 数量必须 ≥ 1", status=422)
-        return {"mode": "fixed", "specs": specs}
+        return {"mode": "fixed", "specs": specs, "max_qty": max_qty}
 
     def start(self, tid: int, body: dict | None) -> JobState:
         body = body or {}
@@ -179,6 +189,23 @@ class JobsService:
         ]
 
         with _WRITE_LOCK:
+            # Clear previous runs/plans for this task so a fresh compute
+            # does not leave stale KPI rows visible to the frontend.
+            self.conn.execute(
+                """
+                DELETE FROM packing_plan
+                WHERE id IN (
+                    SELECT p.id FROM packing_plan p
+                    JOIN packing_run r ON r.id = p.run_id
+                    WHERE r.task_id = ?
+                )
+                """,
+                (tid,),
+            )
+            self.conn.execute(
+                "DELETE FROM packing_run WHERE task_id = ?",
+                (tid,),
+            )
             cur = self.conn.execute(
                 "INSERT INTO packing_run (task_id, created_at, status, algorithms_json) VALUES (?, ?, 'running', ?)",
                 (
@@ -189,7 +216,7 @@ class JobsService:
             )
             run_id = cur.lastrowid
             self.conn.execute(
-                "UPDATE task SET status = 'computing' WHERE id = ?",
+                "UPDATE task SET status = 'computing', adopted_plan_id = NULL WHERE id = ?",
                 (tid,),
             )
             self.conn.commit()
@@ -249,18 +276,18 @@ class JobsService:
         if mode.get("mode") == "freemix":
             # one catalog prototype per type; the freemix algo does the combo search
             base = [self._catalog_proto(code, catalog) for code in mode.get("type_lock", list(catalog.keys()))]
-        else:
-            base = normalize.fixed_containers_multi(mode["specs"], catalog)
-
-        locks = (
-            {
+            locks = {
                 "type_lock": mode.get("type_lock"),
                 "qty_lock": mode.get("qty_lock"),
                 "max_qty": mode.get("max_qty"),
             }
-            if mode.get("mode") == "freemix"
-            else None
-        )
+        else:
+            # fixed mode: specs are upper limits; generate max_qty instances per
+            # type and let each solver fill them. Solvers fill from the back
+            # so the minimum number of containers is used naturally; KPI counts
+            # only containers that actually hold items.
+            base = normalize.fixed_containers_multi(mode["specs"], catalog)
+            locks = None
 
         import packing_engine.kpi as kpi_mod
 
@@ -276,8 +303,10 @@ class JobsService:
             )
             t0 = time.monotonic()
             try:
-                if name == "freemix":
-                    plan = fn(items, containers, settings, enabled_rules, site_groups, rep, locks=locks)
+                if locks is not None:
+                    plan = normalize.freemix(
+                        items, containers, settings, enabled_rules, site_groups, rep, locks=locks
+                    )
                 else:
                     plan = fn(items, containers, settings, enabled_rules, site_groups, rep)
             except Exception as exc:  # E_ENGINE: mark job failed, keep task intact
@@ -307,6 +336,7 @@ class JobsService:
             inner_h=int(row["inner_h"]),
             max_payload=float(row["max_payload"]),
             volume_m3=float(row.get("volume") or 0),
+            freight_price=float(row.get("freight_price") or 0),
         )
 
     @staticmethod
@@ -322,6 +352,7 @@ class JobsService:
             inner_h=c.inner_h,
             max_payload=c.max_payload,
             volume_m3=c.volume_m3,
+            freight_price=getattr(c, "freight_price", 0.0),
         )
 
     def _load_catalog(self) -> dict[str, dict]:

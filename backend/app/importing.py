@@ -117,11 +117,14 @@ def complete_rows(conn, rows: list[dict]) -> list[dict]:
         missing_dim = any(row.get(k) is None for k in DIM_FIELDS)
         master = None
         if missing_dim:
-            pn = row.get("k_pn")
+            pn = _str(row.get("k_pn"))
+            pack = _str(row.get("g_packmatls"))
             if pn:
                 master = pkg.get_by_pn(pn)
-            if master is None and row.get("g_packmatls"):
-                master = pkg.get_by_packmatls(row["g_packmatls"])
+            if master is None and pack:
+                # dual-field match: packing material + PN; a row without PN can
+                # only be filled by a master record that has no PN of its own
+                master = pkg.get_by_packmatls(pack, pn)
             if master and master.get("enabled", 1):
                 source = "master"
                 for field, mkey in MASTER_DIM.items():

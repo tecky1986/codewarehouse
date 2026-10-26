@@ -27,9 +27,9 @@ const showGuide = ref(true);
 
 // mode: "fixed" | "freemix"
 const mode = ref<"fixed" | "freemix">("fixed");
-// fixed: single type + count
+// fixed: single type + upper limit (max qty)
 const fixedType = ref("");
-const fixedCount = ref(1);
+const fixedMaxQty = ref(1);
 // freemix: type lock + qty lock + max
 const freemixTypeLock = ref<Record<string, boolean>>({});
 const freemixQtyLock = ref<Record<string, string>>({});
@@ -90,15 +90,16 @@ async function load() {
     const legacyType = (raw.type_code as string) || "";
     const fixed = (raw.fixed as Record<string, number>) || {};
     const entries = Object.entries(fixed);
+    const legacyMaxQty = (raw.max_qty as Record<string, number>) || {};
     if (legacyType && (raw.count != null || entries.length === 0)) {
       fixedType.value = legacyType;
-      fixedCount.value = (raw.count as number) || 1;
+      fixedMaxQty.value = (legacyMaxQty[legacyType] ?? (raw.count as number) ?? 1);
     } else if (entries.length > 0) {
       fixedType.value = entries[0][0];
-      fixedCount.value = entries[0][1];
+      fixedMaxQty.value = legacyMaxQty[entries[0][0]] ?? entries[0][1];
     } else {
       fixedType.value = "";
-      fixedCount.value = 1;
+      fixedMaxQty.value = 1;
     }
   }
   hasMode.value =
@@ -128,16 +129,21 @@ async function saveContainerMode() {
   modeSaved.value = false;
   let payload: Record<string, unknown>;
   if (mode.value === "fixed") {
-    const count = Number(fixedCount.value);
+    const maxQty = Number(fixedMaxQty.value);
     if (!fixedType.value) {
       modeError.value = "请选择一种箱型。";
       return;
     }
-    if (Number.isNaN(count) || count < 1) {
-      modeError.value = "箱型数量需为大于 0 的整数。";
+    if (Number.isNaN(maxQty) || maxQty < 1 || !Number.isInteger(maxQty)) {
+      modeError.value = "箱型上限需为大于 0 的整数。";
       return;
     }
-    payload = { mode: "fixed", fixed: { [fixedType.value]: count } };
+    // fixed dict holds the upper limit; max_qty mirrors it for the engine
+    payload = {
+      mode: "fixed",
+      fixed: { [fixedType.value]: maxQty },
+      max_qty: { [fixedType.value]: maxQty },
+    };
   } else {
     const typeLock = Object.entries(freemixTypeLock.value)
       .filter(([, v]) => v)
@@ -287,7 +293,7 @@ onMounted(load);
       </div>
 
       <div v-if="mode === 'fixed'" class="mode-body">
-        <div class="hint">选择一种箱型并填写数量。</div>
+        <div class="hint">选择一种箱型并填写数量上限（最多使用的箱数）。</div>
         <div class="form-row" style="margin-top: 8px">
           <select v-model="fixedType">
             <option value="">选择箱型</option>
@@ -295,7 +301,8 @@ onMounted(load);
               {{ t.code }} — {{ t.name }}
             </option>
           </select>
-          <input type="number" v-model.number="fixedCount" min="1" class="count" />
+          <input type="number" v-model.number="fixedMaxQty" min="1" class="count" />
+          <span class="hint-inline">上限</span>
         </div>
       </div>
 
@@ -442,6 +449,7 @@ h2 { font-size: 16px; font-weight: 500; color: #444; margin: 0 0 12px; }
 .form-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .form-row select { padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
 .count { width: 60px; padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+.hint-inline { font-size: 12px; color: #888; }
 button { padding: 6px 14px; border: 1px solid #ccc; border-radius: 4px; background: #fff; font-size: 14px; cursor: pointer; }
 button.primary { background: #1a5c38; color: #fff; border-color: #1a5c38; }
 button.primary:disabled { opacity: 0.4; cursor: not-allowed; }

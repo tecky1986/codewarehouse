@@ -247,6 +247,20 @@ async function adopt(p: Plan) {
   }
 }
 
+async function clearResults() {
+  if (!task.value) return;
+  error.value = "";
+  try {
+    await Tasks.clearRuns(task.value.id);
+    plans.value = [];
+    selectedPlan.value = null;
+    placements.value = [];
+    selected.value = null;
+  } catch (e) {
+    error.value = (e as Error).message;
+  }
+}
+
 function exportXlsx() {
   if (!selectedPlan.value) return;
   window.open(Plans.exportUrl(selectedPlan.value.id, "xlsx"), "_blank");
@@ -406,7 +420,10 @@ onMounted(loadTask);
 
     <section v-if="plans.length" class="section">
       <h2>KPI 对照</h2>
-      <router-link :to="`/tasks/${task.id}/kpi`" class="link">KPI 详表 →</router-link>
+      <div class="kpi-actions">
+        <router-link :to="`/tasks/${task.id}/kpi`" class="link">KPI 详表 →</router-link>
+        <button class="ghost-btn" @click="clearResults">清除旧结果</button>
+      </div>
       <div class="table-wrap">
         <table class="kpi">
           <thead>
@@ -559,7 +576,10 @@ a:hover { text-decoration: underline; }
 .chip { font-size: 11px; padding: 1px 6px; border-radius: 3px; background: #f5f3f0; color: #555; }
 .section { margin-top: 28px; }
 h2 { font-size: 16px; font-weight: 500; color: #444; margin: 0 0 12px; }
-.link { font-size: 13px; display: inline-block; margin-bottom: 12px; }
+.ghost-btn { padding: 3px 12px; border: 1px solid #ccc; border-radius: 4px; background: #fff; font-size: 12px; cursor: pointer; color: #555; }
+.ghost-btn:hover { border-color: #1a5c38; color: #1a5c38; }
+.kpi-actions { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.kpi-actions .link { font-size: 13px; display: inline-block; margin: 0; }
 .algos { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
 .algo { display: flex; align-items: center; gap: 6px; font-size: 14px; color: #333; cursor: pointer; }
 .compute-bar { display: flex; align-items: center; gap: 12px; }

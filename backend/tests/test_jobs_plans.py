@@ -361,15 +361,6 @@ def test_freemix_mode_via_api(client):
     assert plan["kpi"]["overall"]["unassigned_count"] == 0
 
 
-def test_freemix_algorithm_rejected_in_fixed_mode(client):
-    tid = _make_task_multi(client)
-    body = client.post(
-        f"/api/tasks/{tid}/compute", json={"algorithms": ["freemix"]}
-    ).json()
-    assert body["code"] != 0
-    assert "freemix" in body["message"]
-
-
 def test_freemix_mode_requires_type_lock(client):
     body = client.post("/api/tasks", json={"name": "fn"}).json()
     tid = body["data"]["id"]
