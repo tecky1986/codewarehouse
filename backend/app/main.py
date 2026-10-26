@@ -71,14 +71,9 @@ def _static_dir() -> Path:
     import sys
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
-        # onedir: resources live in <exe_dir>/_internal/backend/static
+        # onedir: sys._MEIPASS points to the _internal dir itself,
+        # so resources live at <_MEIPASS>/backend/static
         base = Path(meipass)
-        for candidate in (
-            base / "_internal" / "backend" / "static",
-            base / "backend" / "static",
-        ):
-            if candidate.is_dir():
-                return candidate
         return base / "backend" / "static"
     return Path(__file__).resolve().parents[1] / "static"
 

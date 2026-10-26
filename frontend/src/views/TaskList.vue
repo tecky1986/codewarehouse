@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from "vue";
 import { useRouter } from "vue-router";
 import { Tasks, type Task } from "@/api";
+import FirstUseGuide from "@/components/FirstUseGuide.vue";
 
 const router = useRouter();
 const tasks = ref<Task[]>([]);
@@ -95,6 +96,8 @@ onMounted(load);
 
 <template>
   <div class="page">
+    <FirstUseGuide :task-id="tasks[0]?.id ?? null" />
+
     <div class="top">
       <div>
         <h1>任务</h1>

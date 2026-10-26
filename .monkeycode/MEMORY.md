@@ -41,3 +41,18 @@ Entries discovered by the Agent during task execution should follow this format:
   - Python deps: `pip3 install --break-system-packages -r /workspace/backend/requirements.txt`
   - Frontend deps: `cd /workspace/frontend && npm install`
   - Backend package root is `/workspace/backend` (`pythonpath = .`); API envelope is `{code, message, data}`
+
+[Windows Build Workflow]
+- Date: 2026-10-26
+- Context: User instructed that local Windows packaging cannot be auto-generated in this environment
+- Category: Build Methods
+- Instructions:
+  - This Linux workspace can run PyInstaller/zip, but its PyInstaller output is a Linux ELF bundle, not a Windows .exe.
+  - For a real Windows executable, push Git changes and use the GitHub Windows runner to build the dated zip.
+  - Locally, pull the latest Git revision, then download the newest dated Windows zip from the Git/GitHub release.
+  - The local Linux `dist/container_packing` bundle can still be used for smoke/regression verification of the same frozen startup and API flow.
+  - `build_windows.sh` now supports repacking an existing Windows bundle into a local dated zip via `CP_WINDOWS_PACKAGE=/tmp/win_v021.zip ./build_windows.sh`.
+  - Repacking verifies the zip and PE header, but it does not regenerate the `.exe` from the latest source.
+
+
+

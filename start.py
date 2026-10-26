@@ -36,7 +36,14 @@ def _resource_dir() -> str:
 
 BACKEND_DIR = os.path.join(_resource_dir(), "backend")
 DATA_DIR = os.path.join(os.path.expanduser("~"), ".container-packing")
-os.makedirs(DATA_DIR, exist_ok=True)
+
+try:
+    os.makedirs(DATA_DIR, exist_ok=True)
+    if not os.path.isdir(DATA_DIR) or not os.access(DATA_DIR, os.W_OK):
+        print(f"[start] WARNING: data dir {DATA_DIR} is not writable; "
+              f"persisted data may be lost after restart")
+except OSError as e:
+    print(f"[start] ERROR: cannot create data dir {DATA_DIR}: {e}")
 
 
 def find_free_port(start: int = 8000, tries: int = 10) -> int:
@@ -77,9 +84,10 @@ def _run_frozen(port: int) -> None:
     """Run uvicorn in-process for PyInstaller onefile bundles."""
     _setup_env(port)
     import uvicorn
-    from app.main import app  # noqa: E402
+    from app.main import app as fastapi_app  # noqa: E402
 
     print(f"[start] running in-process on port {port}")
+    print(f"[start] data dir: {DATA_DIR}")
 
     def _open_browser():
         if wait_for_http(port):
@@ -87,7 +95,7 @@ def _run_frozen(port: int) -> None:
 
     threading.Thread(target=_open_browser, daemon=True).start()
     config = uvicorn.Config(
-        app,
+        fastapi_app,
         host="127.0.0.1",
         port=port,
         log_level="info",

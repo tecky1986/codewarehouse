@@ -16,6 +16,7 @@ import {
 import View3D from "@/components/View3D.vue";
 import JobProgress from "@/components/JobProgress.vue";
 import StepNav from "@/components/StepNav.vue";
+import FirstUseGuide from "@/components/FirstUseGuide.vue";
 
 const route = useRoute();
 const tid = computed(() => Number(route.params.id));
@@ -162,6 +163,14 @@ const canCompute = computed(() => {
   return missing;
 });
 
+const guideDoneSteps = computed(() => {
+  const done: number[] = [1];
+  if (doneSteps.value.includes(1)) done.push(2);
+  if (doneSteps.value.includes(3)) done.push(3);
+  if (doneSteps.value.includes(4)) done.push(4);
+  return done;
+});
+
 function syncAlgorithmsToMode() {
   const isFreemix = (mode.value as { mode?: string } | null)?.mode === "freemix";
   algos.value = ALGORITHMS.filter((a) => isFreemix || a.key !== "freemix").map((a) => a.key);
@@ -277,6 +286,8 @@ onMounted(loadTask);
 <template>
   <div class="page" v-if="task">
     <StepNav :task-id="task.id" :current="4" :done="doneSteps" />
+
+    <FirstUseGuide :task-id="task.id" :done-steps="guideDoneSteps" />
 
     <div class="top">
       <div>
