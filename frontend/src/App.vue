@@ -1,8 +1,9 @@
 <template>
   <div class="app-shell">
     <header class="header">
-      <router-link to="/" class="brand">集装箱装箱工具</router-link>
+      <router-link to="/onboarding" class="brand">集装箱装箱工具</router-link>
       <nav class="nav">
+        <router-link to="/onboarding">引导</router-link>
         <router-link to="/tasks">任务</router-link>
         <router-link to="/container-types">箱型</router-link>
         <router-link to="/packages">主数据</router-link>
