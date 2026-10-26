@@ -6,7 +6,8 @@ Stop the service when this process is killed.
 
 Works in two modes:
 - Source mode: run `python start.py` — spawns uvicorn as a child process
-- Frozen mode (PyInstaller onefile): import uvicorn and run in-process
+- Frozen mode (PyInstaller onedir): run uvicorn in-process and keep the
+  browser launch behavior consistent with source mode
 """
 
 import os
@@ -14,6 +15,7 @@ import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 import webbrowser
@@ -68,6 +70,15 @@ def wait_for_http(port: int, timeout: float = 30.0) -> bool:
     return False
 
 
+def open_browser(port: int) -> None:
+    url = f"http://127.0.0.1:{port}"
+    try:
+        webbrowser.open(url, new=2)
+        print(f"[start] opened browser: {url}")
+    except Exception as exc:  # pragma: no cover - UI dependent
+        print(f"[start] browser unavailable: {exc}")
+
+
 def _setup_env(port: int) -> None:
     os.environ["CP_DATA_DIR"] = DATA_DIR
     os.environ["CP_PORT"] = str(port)
@@ -76,7 +87,7 @@ def _setup_env(port: int) -> None:
 
 
 def _run_frozen(port: int) -> None:
-    """Run uvicorn in-process for PyInstaller onefile bundles."""
+    """Run uvicorn in-process for PyInstaller onedir bundles."""
     _setup_env(port)
     import uvicorn
     from app.main import app  # noqa: E402
@@ -93,12 +104,29 @@ def _run_frozen(port: int) -> None:
     def _stop(signum, frame):
         print(f"\n[start] signal {signum}, shutting down …")
         server.should_exit = True
-        time.sleep(0.2)
-        os._exit(0)
 
     signal.signal(signal.SIGINT, _stop)
     signal.signal(signal.SIGTERM, _stop)
-    server.run()
+
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+
+    print("[start] waiting for backend …")
+    if not wait_for_http(port):
+        server.should_exit = True
+        thread.join(timeout=5)
+        raise SystemExit("backend failed to start")
+
+    url = f"http://127.0.0.1:{port}"
+    print(f"[start] ready: {url}")
+    open_browser(port)
+
+    try:
+        while thread.is_alive():
+            time.sleep(0.2)
+    except KeyboardInterrupt:
+        server.should_exit = True
+        thread.join(timeout=5)
 
 
 def _run_source(port: int) -> None:
@@ -130,8 +158,9 @@ def _run_source(port: int) -> None:
         proc.kill()
         raise SystemExit("backend failed to start")
 
-    print(f"[start] ready: http://127.0.0.1:{port}")
-    webbrowser.open(f"http://127.0.0.1:{port}")
+    url = f"http://127.0.0.1:{port}"
+    print(f"[start] ready: {url}")
+    open_browser(port)
     proc.wait()
 
 
