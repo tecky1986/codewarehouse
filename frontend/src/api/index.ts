@@ -13,9 +13,10 @@ async function req<T>(url: string, init?: RequestInit): Promise<T> {
 
 export const ALGORITHMS = [
   { key: "dblf", label: "DBLF" },
-  { key: "maximal", label: "最大空腔" },
-  { key: "ep", label: "极点" },
-  { key: "wall", label: "砌墙" },
+  { key: "maxspace", label: "最大空腔" },
+  { key: "extreme_point", label: "极点" },
+  { key: "wall_build", label: "砌墙" },
+  { key: "guillotine", label: "切割" },
   { key: "freemix", label: "自由组合" },
 ];
 

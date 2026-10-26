@@ -50,6 +50,7 @@ async function save() {
   try {
     await Tasks.saveSiteGroups(tid.value, groups.value);
     saved.value = true;
+    await load();
   } catch (e) {
     error.value = (e as Error).message;
   } finally {
@@ -71,7 +72,9 @@ onMounted(load);
       </div>
       <div class="actions">
         <router-link to="/tasks" class="ghost">返回任务列表</router-link>
-        <button class="primary" @click="save" :disabled="saving || conflict || stepDoneComputed">保存</button>
+        <button class="primary" @click="save" :disabled="saving || conflict || stepDoneComputed">
+          {{ saving ? "保存中…" : "保存" }}
+        </button>
       </div>
     </div>
 

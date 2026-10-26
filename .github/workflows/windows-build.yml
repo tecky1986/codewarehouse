@@ -62,13 +62,16 @@ jobs:
 
           本包不含 Python 源码，请勿移动 _internal 目录。
           "@ | Set-Content -Encoding UTF8 dist/container_packing/使用说明.txt
-          Compress-Archive -Path dist/container_packing -DestinationPath container-packing-windows-x64.zip -Force
+          $timestamp = Get-Date -Format "yyyyMMdd-HHmm"
+          $zipName = "container-packing-windows-x64-$timestamp.zip"
+          Compress-Archive -Path dist/container_packing -DestinationPath $zipName -Force
+          Write-Output "Created: $zipName"
 
       - name: Upload zip artifact
         uses: actions/upload-artifact@v4
         with:
           name: container-packing-windows-x64
-          path: container-packing-windows-x64.zip
+          path: container-packing-windows-x64-*.zip
           if-no-files-found: error
           retention-days: 14
 
@@ -76,7 +79,8 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: container-packing-windows-x64.zip
+          files: |
+            container-packing-windows-x64-*.zip
           generate_release_notes: true
           body: |
             Windows 可执行包（不含源码）。解压后运行 `container_packing.exe`。

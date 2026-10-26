@@ -26,9 +26,10 @@ function statusLabel(t: Task): string {
 function taskHref(t: Task): string {
   const status = t.status || "draft";
   if (status === "draft") return `/tasks/${t.id}/import?guide=1`;
-  if (status === "configuring") return `/tasks/${t.id}/site?guide=1`;
+  if (status === "configuring") return `/tasks/${t.id}/import?guide=1`;
   if (status === "ready") return `/tasks/${t.id}#compute`;
-  return `/tasks/${t.id}`;
+  if (status === "computing" || status === "completed" || status === "failed") return `/tasks/${t.id}`;
+  return `/tasks/${t.id}/import?guide=1`;
 }
 
 const modeLabel = computed(() => (t: Task) => {

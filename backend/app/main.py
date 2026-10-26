@@ -48,15 +48,22 @@ async def unhandled_handler(_request: Request, exc: Exception):
 
 
 class SPAStaticFiles(StaticFiles):
-    """Serve index.html for unmatched paths so Vue history routes work in the desktop exe."""
+    """Serve static assets and fall back to index.html for SPA routes."""
 
     async def get_response(self, path: str, scope):
         try:
-            return await super().get_response(path, scope)
-        except StarletteHTTPException as exc:
-            if exc.status_code == 404:
-                return await super().get_response("index.html", scope)
-            raise
+            response = await super().get_response(path, scope)
+            if response.status_code != 404:
+                return response
+        except StarletteHTTPException:
+            pass
+
+        scope2 = dict(scope)
+        scope2["path"] = "/"
+        index_response = await super().get_response("index.html", scope2)
+        if index_response.status_code == 200 and path:
+            index_response.headers["Cache-Control"] = "no-cache"
+        return index_response
 
 
 def _static_dir() -> Path:

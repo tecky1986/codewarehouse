@@ -103,7 +103,9 @@ onMounted(load);
       </div>
       <div class="actions">
         <router-link to="/tasks" class="ghost">返回任务列表</router-link>
-        <button class="primary" @click="save" :disabled="saving">保存</button>
+        <button class="primary" @click="save" :disabled="saving">
+          {{ saving ? "保存中…" : "保存" }}
+        </button>
       </div>
     </div>
 
@@ -134,9 +136,9 @@ onMounted(load);
       </div>
     </div>
     <div class="next-bar">
-      <span>规则按当前顺序生效，保存后进入计算。</span>
+      <span>{{ saved ? "规则已保存，继续进入计算。" : "规则按当前顺序生效，保存后进入计算。" }}</span>
       <button class="next-btn" @click="saveAndNext" :disabled="saving">
-        保存并去计算
+        {{ saving ? "保存中…" : "保存并去计算" }}
       </button>
     </div>
   </div>

@@ -31,7 +31,7 @@ const preview = ref<ImportPreview | null>(null);
 const error = ref("");
 
 const selected = ref<Placement | null>(null);
-const algos = ref<string[]>(ALGORITHMS.map((a) => a.key));
+const algos = ref<string[]>(ALGORITHMS.filter((a) => a.key !== "freemix").map((a) => a.key));
 
 const _parseJsonField = (v: unknown): Record<string, unknown> => {
   if (v == null) return {};
@@ -162,6 +162,11 @@ const canCompute = computed(() => {
   return missing;
 });
 
+function syncAlgorithmsToMode() {
+  const isFreemix = (mode.value as { mode?: string } | null)?.mode === "freemix";
+  algos.value = ALGORITHMS.filter((a) => isFreemix || a.key !== "freemix").map((a) => a.key);
+}
+
 async function loadTask() {
   error.value = "";
   try {
@@ -172,6 +177,8 @@ async function loadTask() {
     } catch {
       preview.value = null;
     }
+    syncAlgorithmsToMode();
+    if (task.value.status === "failed") task.value.status = "draft";
     await loadPlans();
   } catch (e) {
     error.value = (e as Error).message;
@@ -214,8 +221,10 @@ async function onJobDone(_job: Job) {
   showJob.value = false;
 }
 
-async function onJobFailed(_job: Job) {
+async function onJobFailed(job: Job) {
   showJob.value = false;
+  error.value = job.error || "计算失败，请检查数据或算法配置";
+  await loadTask();
 }
 
 async function adopt(p: Plan) {
