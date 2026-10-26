@@ -82,4 +82,12 @@ button.primary:disabled { opacity: 0.5; }
 .field:last-child { margin-bottom: 0; }
 .lbl { flex: 1; }
 .field input { width: 120px; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; text-align: right; }
+
+@media (max-width: 720px) {
+  .page { padding: 16px 16px 32px; }
+  .top { flex-direction: column; gap: 12px; }
+  .card { padding: 14px; }
+  .field { flex-wrap: wrap; }
+  .field input { width: 100%; max-width: 180px; }
+}
 </style>

@@ -134,16 +134,24 @@ CREATE TABLE IF NOT EXISTS app_setting (
 );
 """
 
-_DATA_DIR = os.environ.get("CP_DATA_DIR")
-DEFAULT_DB = Path(_DATA_DIR) / "data.db" if _DATA_DIR else Path(__file__).resolve().parents[1] / "data.db"
+def _resolve_db_path() -> Path:
+    data_dir = os.environ.get("CP_DATA_DIR")
+    if data_dir:
+        return Path(data_dir) / "data.db"
+    return Path(__file__).resolve().parents[1] / "data.db"
+
+
+_DEFAULT_DB = _resolve_db_path()
+DEFAULT_DB = _DEFAULT_DB
 
 
 def connect(path: str | Path | None = None) -> sqlite3.Connection:
-    db_path = Path(path) if path else DEFAULT_DB
+    db_path = Path(path) if path else _resolve_db_path()
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 15000")
     conn.execute("PRAGMA journal_mode = WAL")
     return conn
 

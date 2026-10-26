@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.staticfiles import StaticFiles
 
 from app.deps import get_conn
@@ -46,23 +47,37 @@ async def unhandled_handler(_request: Request, exc: Exception):
     return fail("E_ENGINE", str(exc), status=500)
 
 
+class SPAStaticFiles(StaticFiles):
+    """Serve static assets and fall back to index.html for SPA routes."""
+
+    async def get_response(self, path: str, scope):
+        try:
+            response = await super().get_response(path, scope)
+            if response.status_code != 404:
+                return response
+        except StarletteHTTPException:
+            pass
+
+        scope2 = dict(scope)
+        scope2["path"] = "/"
+        index_response = await super().get_response("index.html", scope2)
+        if index_response.status_code == 200 and path:
+            index_response.headers["Cache-Control"] = "no-cache"
+        return index_response
+
+
 def _static_dir() -> Path:
     """Resolve the static dir in both source and PyInstaller onedir modes."""
     import sys
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
-        # onedir: resources live in <exe_dir>/_internal/backend/static
+        # onedir: sys._MEIPASS points to the _internal dir itself,
+        # so resources live at <_MEIPASS>/backend/static
         base = Path(meipass)
-        for candidate in (
-            base / "_internal" / "backend" / "static",
-            base / "backend" / "static",
-        ):
-            if candidate.is_dir():
-                return candidate
         return base / "backend" / "static"
     return Path(__file__).resolve().parents[1] / "static"
 
 
 _STATIC = _static_dir()
 if _STATIC.is_dir():
-    app.mount("/", StaticFiles(directory=str(_STATIC), html=True), name="static")
+    app.mount("/", SPAStaticFiles(directory=str(_STATIC), html=True), name="static")

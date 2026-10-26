@@ -31,17 +31,20 @@ def _resource_dir() -> str:
     """
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
-        base = Path(meipass)
-        for candidate in (base / "_internal", base):
-            if (candidate / "backend" / "app").is_dir():
-                return str(candidate)
         return meipass
     return os.path.dirname(os.path.abspath(__file__))
 
 
 BACKEND_DIR = os.path.join(_resource_dir(), "backend")
 DATA_DIR = os.path.join(os.path.expanduser("~"), ".container-packing")
-os.makedirs(DATA_DIR, exist_ok=True)
+
+try:
+    os.makedirs(DATA_DIR, exist_ok=True)
+    if not os.path.isdir(DATA_DIR) or not os.access(DATA_DIR, os.W_OK):
+        print(f"[start] WARNING: data dir {DATA_DIR} is not writable; "
+              f"persisted data may be lost after restart")
+except OSError as e:
+    print(f"[start] ERROR: cannot create data dir {DATA_DIR}: {e}")
 
 
 def find_free_port(start: int = 8000, tries: int = 10) -> int:
@@ -82,19 +85,27 @@ def open_browser(port: int) -> None:
 def _setup_env(port: int) -> None:
     os.environ["CP_DATA_DIR"] = DATA_DIR
     os.environ["CP_PORT"] = str(port)
-    sys.path.insert(0, BACKEND_DIR)
-    os.chdir(BACKEND_DIR)
+    if not getattr(sys, "frozen", False):
+        sys.path.insert(0, BACKEND_DIR)
+        os.chdir(BACKEND_DIR)
 
 
 def _run_frozen(port: int) -> None:
     """Run uvicorn in-process for PyInstaller onedir bundles."""
     _setup_env(port)
     import uvicorn
-    from app.main import app  # noqa: E402
+    from app.main import app as fastapi_app  # noqa: E402
 
     print(f"[start] running in-process on port {port}")
+    print(f"[start] data dir: {DATA_DIR}")
+
+    def _open_browser():
+        if wait_for_http(port):
+            webbrowser.open(f"http://127.0.0.1:{port}")
+
+    threading.Thread(target=_open_browser, daemon=True).start()
     config = uvicorn.Config(
-        app,
+        fastapi_app,
         host="127.0.0.1",
         port=port,
         log_level="info",

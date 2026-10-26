@@ -458,7 +458,7 @@ defineExpose({
 .canvas-wrap {
   position: relative;
   width: 100%;
-  height: 420px;
+  height: clamp(280px, 52vh, 460px);
   border: 1px solid #e0e0e0;
   border-radius: 6px;
   overflow: hidden;
@@ -545,6 +545,7 @@ defineExpose({
   border-radius: 6px;
   font-size: 13px;
   color: #444;
+  flex-wrap: wrap;
 }
 
 .sel-info .pn {

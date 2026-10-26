@@ -29,10 +29,33 @@ def list_tasks(repo: TaskRepo = Depends(_task_repo)):
     return ok(repo.list_all())
 
 
+@router.get("/sample.xlsx")
+def sample_xlsx(conn=Depends(get_conn)):
+    """下载示例导入表（测试期功能，上线前移除）。"""
+    from openpyxl import Workbook
+
+    from app.seed import SAMPLE_IMPORT_ROWS, SAMPLE_IMPORT_ROWS_HEADER
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "sample"
+    ws.append(SAMPLE_IMPORT_ROWS_HEADER)
+    for row in SAMPLE_IMPORT_ROWS:
+        ws.append(row)
+    from io import BytesIO
+
+    buf = BytesIO()
+    wb.save(buf)
+    headers = {"Content-Disposition": content_disposition("示例导入表.xlsx")}
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
+    )
+
+
 @router.post("")
 def create_task(body: dict, repo: TaskRepo = Depends(_task_repo)):
-    if not body.get("name"):
-        return fail("E_VALIDATION", "name is required", status=422)
     return ok(repo.create(body))
 
 
@@ -137,10 +160,16 @@ def get_site_groups(tid: int, conn=Depends(get_conn)):
     task = TaskRepo(conn).get(tid)
     rows = ImportRowRepo(conn).list_by_task(tid)
     sites: dict[str, dict] = {}
+    seen_sites: set[str] = set()
+    has_rows = False
     for r in rows:
-        site = r.get("m_site") or ""
+        has_rows = True
+        site = (r.get("m_site") or "").strip()
+        bucket_key = site or "(no_site)"
+        if site:
+            seen_sites.add(site)
         bucket = sites.setdefault(
-            site,
+            bucket_key,
             {"site": site, "together": False, "separate": False, "items": []},
         )
         bucket["items"].append(
@@ -157,10 +186,13 @@ def get_site_groups(tid: int, conn=Depends(get_conn)):
         import json
 
         saved = json.loads(saved) if saved else []
-    by_site = {s.get("site"): s for s in saved if isinstance(s, dict)}
+    by_site: dict[str, dict] = {}
+    for s in saved:
+        if isinstance(s, dict):
+            by_site[str(s.get("site") or "")] = s
     result = []
-    for site, bucket in sites.items():
-        extra = by_site.get(site) or {}
+    for bucket in sites.values():
+        extra = by_site.get(bucket["site"]) or {}
         bucket["together"] = bool(extra.get("together"))
         bucket["separate"] = bool(extra.get("separate"))
         result.append(bucket)
@@ -173,5 +205,5 @@ def put_site_groups(tid: int, body: Any = Body(...), conn=Depends(get_conn)):
     for g in groups:
         if g.get("together") and g.get("separate"):
             return fail("E_VALIDATION", "同一 Site 不能同时同柜与分离", status=422)
-    TaskRepo(conn).update(tid, {"site_groups_json": groups})
+    TaskRepo(conn).update(tid, {"site_groups_json": groups, "status": "configuring"})
     return ok(groups)

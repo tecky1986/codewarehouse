@@ -79,6 +79,8 @@ def test_compute_and_plans_flow(client):
     job = body["data"]
     finished = _wait_job(client, job["id"])
     assert finished["status"] == "done"
+    task_after = client.get(f"/api/tasks/{tid}").json()["data"]
+    assert task_after["status"] == "completed"
     assert "dblf" in finished["progress"]
     plans = client.get(f"/api/tasks/{tid}/plans").json()["data"]
     assert len(plans) == 2

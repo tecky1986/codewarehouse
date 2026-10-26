@@ -13,9 +13,10 @@ async function req<T>(url: string, init?: RequestInit): Promise<T> {
 
 export const ALGORITHMS = [
   { key: "dblf", label: "DBLF" },
-  { key: "maximal", label: "最大空腔" },
-  { key: "ep", label: "极点" },
-  { key: "wall", label: "砌墙" },
+  { key: "maxspace", label: "最大空腔" },
+  { key: "extreme_point", label: "极点" },
+  { key: "wall_build", label: "砌墙" },
+  { key: "guillotine", label: "切割" },
   { key: "freemix", label: "自由组合" },
 ];
 
@@ -24,9 +25,9 @@ export interface Task {
   id: number;
   name: string;
   created_at?: string;
-  container_mode_json?: string;
-  rules_json?: string;
-  site_groups_json?: string;
+  container_mode_json?: string | Record<string, unknown>;
+  rules_json?: string | unknown[];
+  site_groups_json?: string | Record<string, unknown>;
   adopted_plan_id?: number | null;
   status?: string;
 }
@@ -80,6 +81,7 @@ export const Tasks = {
       method: "PUT",
       body: JSON.stringify(groups),
     }),
+  sampleXlsxUrl: () => "/api/tasks/sample.xlsx",
 };
 
 // ---- jobs
@@ -222,9 +224,11 @@ export interface ImportRow {
 
 export interface ImportPreview {
   rows: ImportRow[];
-  missing: Array<{ pn: string; packmatls: string }>;
+  missing: Array<{ pn: string | null; packmatls: string | null; row_no: number | null }>;
   can_compute: boolean;
   row_count: number;
+  distinct_sites?: string[];
+  site_auto_confirmed?: boolean;
 }
 
 // ---- site groups

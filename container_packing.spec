@@ -1,16 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for container-packing (onedir).
+"""PyInstaller spec for container-packing (onedir, no Python sources).
 
 Build (run from /workspace):
   pyinstaller container_packing.spec
 
 Produces dist/container_packing/ with the container_packing executable
-plus an _internal resource directory.
+plus an _internal resource directory. Backend code is compiled into the
+PYZ archive; only static assets are shipped as data files.
 """
 
 import os
 
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 _ROOT = os.path.dirname(os.path.abspath(globals().get("__file__", "container_packing.spec")))
 
@@ -19,13 +20,13 @@ a = Analysis(
     pathex=[os.path.join(_ROOT, "backend")],
     binaries=[],
     datas=[
-        (os.path.join(_ROOT, "backend", "app"), "backend/app"),
-        (os.path.join(_ROOT, "backend", "packing_engine"), "backend/packing_engine"),
         (os.path.join(_ROOT, "backend", "static"), "backend/static"),
     ]
     + collect_data_files("openpyxl")
     + collect_data_files("uvicorn"),
-    hiddenimports=[
+    hiddenimports=collect_submodules("app")
+    + collect_submodules("packing_engine")
+    + [
         "openpyxl",
         "uvicorn",
         "uvicorn.logging",
@@ -34,12 +35,14 @@ a = Analysis(
         "uvicorn.protocols",
         "uvicorn.protocols.http",
         "uvicorn.protocols.http.auto",
+        "uvicorn.lifespan",
+        "uvicorn.lifespan.on",
         "uvicorn.workers",
     ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter", "pytest"],
+    excludes=["tkinter", "pytest", "tests"],
     noarchive=False,
     optimize=0,
 )

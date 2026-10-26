@@ -2,7 +2,7 @@ from typing import Any
 
 from fastapi import APIRouter, Body, Depends
 
-from app.deps import get_conn
+from app.deps import get_conn, current_db_path
 from app.errors import AppError, ConflictError, NotFoundError
 from app.jobs import JobsService, get_job_state, run_status_from_db
 from app.repos import TaskRepo
@@ -12,7 +12,7 @@ router = APIRouter(tags=["jobs-plans"])
 
 
 def _jobs(conn=Depends(get_conn)) -> JobsService:
-    return JobsService(conn)
+    return JobsService(conn, current_db_path())
 
 
 def _task(conn=Depends(get_conn)) -> TaskRepo:

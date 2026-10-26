@@ -147,7 +147,6 @@ a.ghost:hover { color: #1a5c38; }
 .badge { font-size: 11px; padding: 1px 6px; border-radius: 3px; background: #e8f5e9; color: #1a5c38; }
 .ts { font-size: 12px; color: #999; margin-left: auto; }
 .metrics { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
-.metric { display: flex; flex-direction: column; gap: 2px; }
 .num { font-size: 18px; font-weight: 600; color: #2c2c2c; }
 .cap { font-size: 11px; color: #888; }
 .foot { display: flex; gap: 8px; margin-top: 14px; align-items: center; }
@@ -156,4 +155,16 @@ button.primary:disabled { opacity: 0.4; cursor: default; }
 button.ghost-btn { padding: 5px 12px; border: 1px solid #ccc; border-radius: 4px; background: #fff; font-size: 13px; cursor: pointer; color: #555; }
 button.ghost-btn:hover { border-color: #1a5c38; color: #1a5c38; }
 .empty { color: #999; font-size: 14px; padding: 24px 0; text-align: center; }
+
+@media (max-width: 900px) {
+  .page { padding: 24px 24px 40px; }
+  .top { flex-direction: column; gap: 12px; }
+  .metrics { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 720px) {
+  .page { padding: 16px 16px 32px; }
+  .metrics { grid-template-columns: repeat(2, 1fr); }
+  .foot { flex-wrap: wrap; }
+}
 </style>

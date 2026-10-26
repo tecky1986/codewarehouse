@@ -12,6 +12,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 
 from app.errors import AppError, ConflictError
 from app.importing import complete_rows
@@ -86,8 +87,9 @@ def run_status_from_db(conn: sqlite3.Connection, run_id: int) -> dict:
 
 
 class JobsService:
-    def __init__(self, conn: sqlite3.Connection):
+    def __init__(self, conn: sqlite3.Connection, db_path: str | Path | None = None):
         self.conn = conn
+        self.db_path = db_path
 
     # ------------------------------------------------------------------
     # start
@@ -186,6 +188,11 @@ class JobsService:
                 ),
             )
             run_id = cur.lastrowid
+            self.conn.execute(
+                "UPDATE task SET status = 'computing' WHERE id = ?",
+                (tid,),
+            )
+            self.conn.commit()
 
         job = JobState(run_id=run_id, task_id=tid, algorithms=algorithms)
         with _REGISTRY_LOCK:
@@ -323,66 +330,85 @@ class JobsService:
         ).fetchall()
         return {r["code"]: dict(r) for r in rows}
 
+    def _load_catalog(self) -> dict[str, dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM container_type WHERE enabled = 1"
+        ).fetchall()
+        return {r["code"]: dict(r) for r in rows}
+
+    def _worker_conn(self) -> sqlite3.Connection:
+        """Return a dedicated connection for worker-thread persistence."""
+        from app.db import connect
+        return connect(self.db_path)
+
     def _persist(self, job: JobState, rows: list[dict], plans: list, elapsed: dict):
         # pair engine items (uid "r{import_row_id}") with import_row ids
         uid_to_row_id: dict[str, int] = {f"r{r['id']}": r["id"] for r in rows}
         timed_out = any(getattr(p, "timed_out", False) for p in plans)
 
         with _WRITE_LOCK:
-            for p in plans:
-                plan_cur = self.conn.execute(
-                    "INSERT INTO packing_plan (run_id, algorithm, is_adopted, kpi_json, created_ms) VALUES (?, ?, 0, ?, ?)",
-                    (
-                        job.run_id,
-                        p.algorithm,
-                        json.dumps(p.kpi or {}),
-                        int(time.time() * 1000),
-                    ),
-                )
-                plan_id = plan_cur.lastrowid
-                job.plans.append(
-                    {"id": plan_id, "algorithm": p.algorithm, "elapsed_s": p.elapsed_s}
-                )
-
-                for c in p.containers:
-                    ci_cur = self.conn.execute(
-                        "INSERT INTO container_instance (plan_id, type_code, seq_no, label) VALUES (?, ?, ?, ?)",
-                        (plan_id, c.type_code, c.seq_no, c.label),
+            wconn = self._worker_conn()
+            try:
+                for p in plans:
+                    plan_cur = wconn.execute(
+                        "INSERT INTO packing_plan (run_id, algorithm, is_adopted, kpi_json, created_ms) VALUES (?, ?, 0, ?, ?)",
+                        (
+                            job.run_id,
+                            p.algorithm,
+                            json.dumps(p.kpi or {}),
+                            int(time.time() * 1000),
+                        ),
                     )
-                    ci_id = ci_cur.lastrowid
-                    for pl in c.placed:
-                        self.conn.execute(
+                    plan_id = plan_cur.lastrowid
+                    job.plans.append(
+                        {"id": plan_id, "algorithm": p.algorithm, "elapsed_s": p.elapsed_s}
+                    )
+
+                    for c in p.containers:
+                        ci_cur = wconn.execute(
+                            "INSERT INTO container_instance (plan_id, type_code, seq_no, label) VALUES (?, ?, ?, ?)",
+                            (plan_id, c.type_code, c.seq_no, c.label),
+                        )
+                        ci_id = ci_cur.lastrowid
+                        for pl in c.placed:
+                            wconn.execute(
+                                """INSERT INTO placement
+                                (plan_id, container_id, import_row_id, x, y, z, dim_x, dim_y, dim_z, rotation, load_seq, unassigned_reason)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)""",
+                                (
+                                    plan_id,
+                                    ci_id,
+                                    uid_to_row_id.get(pl.item.uid),
+                                    pl.x,
+                                    pl.y,
+                                    pl.z,
+                                    pl.dx,
+                                    pl.dy,
+                                    pl.dz,
+                                    pl.load_seq,
+                                    None,
+                                ),
+                            )
+
+                    for ui in p.unassigned:
+                        wconn.execute(
                             """INSERT INTO placement
                             (plan_id, container_id, import_row_id, x, y, z, dim_x, dim_y, dim_z, rotation, load_seq, unassigned_reason)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)""",
-                            (
-                                plan_id,
-                                ci_id,
-                                uid_to_row_id.get(pl.item.uid),
-                                pl.x,
-                                pl.y,
-                                pl.z,
-                                pl.dx,
-                                pl.dy,
-                                pl.dz,
-                                pl.load_seq,
-                                None,
-                            ),
+                            VALUES (?, NULL, ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?)""",
+                            (plan_id, uid_to_row_id.get(ui.uid), "未分配"),
                         )
 
-                for ui in p.unassigned:
-                    self.conn.execute(
-                        """INSERT INTO placement
-                        (plan_id, container_id, import_row_id, x, y, z, dim_x, dim_y, dim_z, rotation, load_seq, unassigned_reason)
-                        VALUES (?, NULL, ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?)""",
-                        (plan_id, uid_to_row_id.get(ui.uid), "未分配"),
-                    )
-
-            self.conn.execute(
-                "UPDATE packing_run SET status = ? WHERE id = ?",
-                ("done" if not timed_out else "done", job.run_id),
-            )
-            self.conn.commit()
+                wconn.execute(
+                    "UPDATE packing_run SET status = ? WHERE id = ?",
+                    ("done", job.run_id),
+                )
+                wconn.execute(
+                    "UPDATE task SET status = 'completed' WHERE id = ?",
+                    (job.task_id,),
+                )
+                wconn.commit()
+            finally:
+                wconn.close()
 
         with _REGISTRY_LOCK:
             job.status = "done"
@@ -390,10 +416,18 @@ class JobsService:
 
     def fail(self, job: JobState, message: str) -> None:
         with _WRITE_LOCK:
-            self.conn.execute(
-                "UPDATE packing_run SET status = 'failed' WHERE id = ?", (job.run_id,)
-            )
-            self.conn.commit()
+            wconn = self._worker_conn()
+            try:
+                wconn.execute(
+                    "UPDATE packing_run SET status = 'failed' WHERE id = ?", (job.run_id,)
+                )
+                wconn.execute(
+                    "UPDATE task SET status = 'failed' WHERE id = ?",
+                    (job.task_id,),
+                )
+                wconn.commit()
+            finally:
+                wconn.close()
         with _REGISTRY_LOCK:
             job.status = "failed"
             job.error = message

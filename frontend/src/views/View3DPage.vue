@@ -91,4 +91,13 @@ a.ghost:hover { color: #1a5c38; }
 .badge { font-size: 10px; padding: 0 5px; border-radius: 3px; background: #e8f5e9; color: #1a5c38; }
 .plan-btn.active .badge { background: rgba(255,255,255,0.3); color: #fff; }
 .empty { color: #999; font-size: 14px; padding: 24px 0; text-align: center; }
+
+@media (max-width: 900px) {
+  .page { padding: 24px 24px 40px; }
+  .top { flex-direction: column; gap: 12px; }
+}
+
+@media (max-width: 720px) {
+  .page { padding: 16px 16px 32px; }
+}
 </style>
