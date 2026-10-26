@@ -18,6 +18,17 @@ def _repo(conn=Depends(get_conn)) -> SettingRepo:
     return SettingRepo(conn)
 
 
+def _normalize_body(body: dict | None) -> dict:
+    if not isinstance(body, dict):
+        return {}
+    cleaned: dict[str, str] = {}
+    for k, v in body.items():
+        if k is None or v is None:
+            continue
+        cleaned[str(k)] = str(v)
+    return cleaned
+
+
 @router.get("")
 def get_settings(repo: SettingRepo = Depends(_repo)):
     data = {**DEFAULTS, **repo.get_all()}
@@ -25,8 +36,8 @@ def get_settings(repo: SettingRepo = Depends(_repo)):
 
 
 @router.put("")
-def put_settings(body: dict, repo: SettingRepo = Depends(_repo)):
-    for k, v in body.items():
+def put_settings(body: dict | None, repo: SettingRepo = Depends(_repo)):
+    for k, v in _normalize_body(body).items():
         repo.put(str(k), v)
     data = {**DEFAULTS, **repo.get_all()}
     return ok(data)
