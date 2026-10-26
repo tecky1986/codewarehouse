@@ -3,7 +3,8 @@ import { createRouter, createWebHistory } from "vue-router";
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: "/", redirect: "/tasks" },
+    { path: "/", redirect: "/onboarding" },
+    { path: "/onboarding", component: () => import("@/views/Onboarding.vue") },
     { path: "/tasks", component: () => import("@/views/TaskList.vue") },
     {
       path: "/tasks/:id",
