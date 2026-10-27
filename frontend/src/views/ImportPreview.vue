@@ -258,19 +258,6 @@ onMounted(load);
           @change="onFileSelected"
         />
       </div>
-      <div class="form-row" style="margin-top: 10px">
-        <a class="link" href="#batch" @click.prevent="pendingInput?.click()">
-          批量维护缺失规格
-        </a>
-        <input
-          type="file"
-          ref="pendingInput"
-          accept=".xlsx,.xls,.csv"
-          class="hidden-input"
-          @change="onPendingFile"
-        />
-        <p class="hint">下载待填表 → 补全规格 → 上传待填表 → 自动重新匹配主数据。</p>
-      </div>
       <p v-if="importing" class="hint">处理中…</p>
     </section>
 
@@ -389,9 +376,22 @@ onMounted(load);
         <span class="step-badge">4</span>
         <div>
           <h2>补齐缺失规格</h2>
-          <p class="section-hint">缺失 PN / PackMatls 的行无法参与计算。</p>
+          <p class="section-hint">缺失长宽高的行按 PN + PackMatls 匹配主数据。可下载待填表批量补全并写回主数据。</p>
         </div>
       </div>
+      <div class="form-row" style="margin-bottom: 12px">
+        <button @click="downloadPending" :disabled="!preview?.row_count">下载待填规格</button>
+        <button @click="pendingInput?.click()" :disabled="importing">上传待填表</button>
+        <input
+          type="file"
+          ref="pendingInput"
+          accept=".xlsx,.xls"
+          class="hidden-input"
+          @change="onPendingFile"
+        />
+        <a class="link" href="/packages" target="_blank">打开包装主数据</a>
+      </div>
+      <p class="hint">下载待填表 → 补全规格 → 上传后写入主数据并自动重新匹配。匹配键为 PN + PackMatls。</p>
       <div class="table-wrap" v-if="missing.length">
         <table class="tbl">
           <thead>

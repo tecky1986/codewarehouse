@@ -242,6 +242,17 @@ class PackageMasterRepo:
         self.conn.commit()
         return self.get(pid)
 
+    def upsert(self, data: dict) -> dict:
+        existing = None
+        if data.get("pn"):
+            existing = self.get_by_pn(data["pn"])
+        pack = data.get("name") or data.get("package_type")
+        if existing is None and pack:
+            existing = self.get_by_packmatls(pack, data.get("pn"))
+        if existing:
+            return self.update(existing["id"], data)
+        return self.create(data)
+
     def delete(self, pid: int) -> None:
         self.get(pid)
         self.conn.execute("DELETE FROM package_master WHERE id = ?", (pid,))

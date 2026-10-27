@@ -367,6 +367,20 @@ export const Packages = {
     }),
   remove: (id: number) =>
     req<null>(`/api/packages/${id}`, { method: "DELETE" }),
+  templateUrl: () => "/api/packages/template",
+  exportUrl: () => "/api/packages/export",
+  importFile: async (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    const r = await fetch("/api/packages/import", { method: "POST", body: form });
+    const body = (await r.json()) as ApiEnvelope<{
+      saved: PackageMaster[];
+      saved_count: number;
+      skipped: number;
+    }>;
+    if (!isOk(body)) throw new Error(body.message);
+    return body.data;
+  },
 };
 
 export const Settings = {

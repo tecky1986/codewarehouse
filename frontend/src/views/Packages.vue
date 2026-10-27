@@ -6,6 +6,9 @@ const items = ref<PackageMaster[]>([]);
 const showForm = ref(false);
 const editing = ref<PackageMaster | null>(null);
 const error = ref("");
+const importMsg = ref("");
+const importing = ref(false);
+const importInput = ref<HTMLInputElement>();
 
 const emptyForm = () => ({
   pn: "",
@@ -93,6 +96,32 @@ async function remove(p: PackageMaster) {
   }
 }
 
+function downloadTemplate() {
+  window.open(Packages.templateUrl(), "_blank");
+}
+
+function downloadExport() {
+  window.open(Packages.exportUrl(), "_blank");
+}
+
+async function onImportFile() {
+  const file = importInput.value?.files?.[0];
+  if (!file) return;
+  importing.value = true;
+  error.value = "";
+  importMsg.value = "";
+  try {
+    const result = await Packages.importFile(file);
+    importMsg.value = `已导入 ${result.saved_count} 条` + (result.skipped ? `，跳过 ${result.skipped} 条缺尺寸记录` : "");
+    await load();
+  } catch (e) {
+    error.value = (e as Error).message;
+  } finally {
+    importing.value = false;
+    if (importInput.value) importInput.value.value = "";
+  }
+}
+
 onMounted(load);
 </script>
 
@@ -101,14 +130,25 @@ onMounted(load);
     <div class="top">
       <div>
         <h1>包装主数据</h1>
-        <p class="sub">PN 优先键，PackMatls 次级键；尺寸 mm、重量 kg。</p>
+        <p class="sub">按 PN + PackMatls 双字段匹配；尺寸 mm、重量 kg。可批量导入 Excel。</p>
       </div>
       <div class="actions">
+        <button @click="downloadTemplate">下载模板</button>
+        <button @click="downloadExport">导出全部</button>
+        <button @click="importInput?.click()" :disabled="importing">{{ importing ? "导入中…" : "批量导入" }}</button>
+        <input
+          type="file"
+          ref="importInput"
+          accept=".xlsx,.xls"
+          class="hidden-input"
+          @change="onImportFile"
+        />
         <button class="primary" @click="startCreate">新增</button>
       </div>
     </div>
 
     <p v-if="error" class="error">{{ error }}</p>
+    <p v-if="importMsg" class="ok-text">{{ importMsg }}</p>
 
     <div v-if="showForm" class="form-card">
       <h2>{{ editing ? `编辑 ${editing.pn || editing.name}` : "新增包装" }}</h2>
@@ -207,6 +247,12 @@ button.primary { padding: 6px 18px; background: #1a5c38; color: #fff; border: no
 .ops { display: flex; gap: 6px; }
 .ops button { padding: 3px 10px; border: 1px solid #ccc; border-radius: 4px; background: #fff; font-size: 12px; cursor: pointer; }
 .ops button.danger { color: #c62828; border-color: #c62828; }
+.actions button { padding: 6px 14px; border: 1px solid #ccc; border-radius: 4px; background: #fff; font-size: 14px; cursor: pointer; }
+.actions button.primary { background: #1a5c38; color: #fff; border-color: #1a5c38; }
+.actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+.actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.hidden-input { display: none; }
+.ok-text { color: #1a5c38; font-size: 13px; margin: 0 0 12px; }
 
 @media (max-width: 900px) {
   .page { padding: 24px 24px 40px; }
