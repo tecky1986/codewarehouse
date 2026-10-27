@@ -27,6 +27,7 @@ const ALL_RULES = [
   { key: "pn_continuous", label: "PN 连续" },
   { key: "site_separate", label: "Site 分离" },
   { key: "same_type_stack", label: "同种堆叠" },
+  { key: "max_stack_layers", label: "堆码层数" },
   { key: "crush", label: "易压" },
   { key: "weight_order", label: "轻重" },
   { key: "fork_tine", label: "装卸" },

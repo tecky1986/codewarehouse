@@ -135,15 +135,7 @@ def batch_maintain(
     for item in items:
         if item.get("l") is None or item.get("w") is None or item.get("h") is None:
             continue
-        existing = None
-        if item.get("pn"):
-            existing = pkg.get_by_pn(item["pn"])
-        if existing is None and item.get("name"):
-            existing = pkg.get_by_packmatls(item["name"])
-        if existing:
-            saved.append(pkg.update(existing["id"], item))
-        else:
-            saved.append(pkg.create(item))
+        saved.append(pkg.upsert(item))
     return ok(saved)
 
 

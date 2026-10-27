@@ -295,6 +295,56 @@ def test_fixed_multi_type_labels(client):
     assert "40GP-1" in labels_in_kpi
 
 
+def test_fixed_zero_means_unlimited(client):
+    body = client.post("/api/tasks", json={"name": "t0"}).json()
+    tid = body["data"]["id"]
+    client.put(
+        f"/api/tasks/{tid}",
+        json={"container_mode_json": {"mode": "fixed", "fixed": {"20GP": 0}}},
+    )
+    client.put(f"/api/tasks/{tid}", json={"rules_json": None})
+    from app.repos import ImportRowRepo
+
+    ImportRowRepo(client.conn).replace_for_task(
+        tid,
+        [
+            {
+                "task_id": tid,
+                "row_no": i + 1,
+                "a_no": str(i + 1),
+                "b_len": 1000.0,
+                "c_wid": 1000.0,
+                "d_hgt": 1000.0,
+                "e_cbm": 1.0,
+                "f_outcase": "CTN",
+                "g_packmatls": None,
+                "h_tare": 0.0,
+                "i_net": 90.0,
+                "j_gross": 100.0,
+                "k_pn": "P1",
+                "l_note": None,
+                "m_site": None,
+                "o_ref": None,
+                "p_dn": None,
+                "q_misc": None,
+                "filled_fields_json": "[]",
+                "source_flag": "table",
+            }
+            for i in range(6)
+        ],
+    )
+    resp = client.post(
+        f"/api/tasks/{tid}/compute", json={"algorithms": ["dblf"]}
+    ).json()
+    assert resp["code"] == 0, resp
+    finished = _wait_job(client, resp["data"]["id"])
+    assert finished["status"] == "done"
+    plans = client.get(f"/api/tasks/{tid}/plans").json()["data"]
+    plan = next(p for p in plans if p["algorithm"] == "dblf")
+    assert plan["kpi"]["overall"]["unassigned_count"] == 0
+    assert plan["kpi"]["overall"]["containers_used"] >= 1
+
+
 def test_freemix_mode_via_api(client):
     body = client.post("/api/tasks", json={"name": "tf"}).json()
     tid = body["data"]["id"]
@@ -359,15 +409,6 @@ def test_freemix_mode_via_api(client):
     assert by_code.get("40GP", 0) <= 3  # max_qty upper bound
     # all 6 items assigned (freemix returns a fully-loaded plan)
     assert plan["kpi"]["overall"]["unassigned_count"] == 0
-
-
-def test_freemix_algorithm_rejected_in_fixed_mode(client):
-    tid = _make_task_multi(client)
-    body = client.post(
-        f"/api/tasks/{tid}/compute", json={"algorithms": ["freemix"]}
-    ).json()
-    assert body["code"] != 0
-    assert "freemix" in body["message"]
 
 
 def test_freemix_mode_requires_type_lock(client):

@@ -1,10 +1,45 @@
 """Build CargoItems + containers from DB rows for computation."""
 
+import re
 from packing_engine.model import CargoItem, ContainerInstance, Plan
 
 import json
 
 from packing_engine.freemix import search as _freemix_search
+
+
+def _pn_regex(pn: str) -> re.Pattern:
+    """Compile PN pattern: ? matches any number of chars (.*);
+    each # matches exactly one char."""
+    parts: list[str] = []
+    i = 0
+    while i < len(pn):
+        c = pn[i]
+        if c == "?":
+            while i < len(pn) and pn[i] == "?":
+                i += 1
+            parts.append(".*")
+        elif c == "#":
+            j = i
+            while j < len(pn) and pn[j] == "#":
+                j += 1
+            parts.append("." * (j - i))
+            i = j
+        else:
+            j = i
+            while j < len(pn) and pn[j] not in ("?", "#"):
+                j += 1
+            parts.append(re.escape(pn[i:j]))
+            i = j
+    return re.compile("".join(parts) + "$")
+
+
+def _match_pn(pn: str, pattern: str) -> bool:
+    """Return True when *pn* matches *pattern*.
+    ? = any number of chars; # = exactly one char."""
+    if "?" not in pattern and "#" not in pattern:
+        return pn == pattern
+    return bool(_pn_regex(pattern).match(pn))
 
 
 def freemix(
@@ -49,14 +84,32 @@ def items_from_rows(rows: list[dict], packages: list[dict] | None = None, manual
     used to fill rule attributes (crush, same_type_stack, rotatable, ...)
     when the source row did not carry them.
     """
-    pkg_by_pn = {}
-    pkg_by_name = {}
+    pkg_by_pn: dict[str, dict] = {}
+    pkg_by_name: dict[str, dict] = {}
+    pkg_patterns: list[tuple[str, dict]] = []  # (pattern_pn, master)
+
     for p in packages or []:
-        if p.get("pn"):
-            pkg_by_pn.setdefault(p["pn"], p)
+        pn_p = p.get("pn")
+        if pn_p:
+            if "?" in pn_p or "#" in pn_p:
+                pkg_patterns.append((pn_p, p))
+            else:
+                pkg_by_pn.setdefault(pn_p, p)
         key = p.get("package_type") or p.get("name")
         if key:
             pkg_by_name.setdefault(key, p)
+
+    def _find_master(pn: str | None, pack: str | None) -> dict | None:
+        if pn:
+            m = pkg_by_pn.get(pn)
+            if m is not None:
+                return m
+            for pat, p in pkg_patterns:
+                if _match_pn(pn, pat):
+                    return p
+        if pack:
+            return pkg_by_name.get(pack)
+        return None
 
     out: list[CargoItem] = []
     for r in rows:
@@ -64,9 +117,7 @@ def items_from_rows(rows: list[dict], packages: list[dict] | None = None, manual
             continue
         pn = r.get("k_pn")
         pack = r.get("g_packmatls")
-        master = pkg_by_pn.get(pn) if pn else None
-        if master is None and pack:
-            master = pkg_by_name.get(pack)
+        master = _find_master(pn, pack)
 
         def _d(key, default=0.0):
             v = r.get(key)
@@ -120,6 +171,8 @@ def fixed_containers(
                 inner_h=int(row["inner_h"]),
                 max_payload=float(row["max_payload"]),
                 volume_m3=float(row.get("volume") or 0),
+                freight_price=float(row.get("freight_price") or 0),
+                max_stack_layers=row.get("max_stack_layers"),
             )
         )
     return out
@@ -151,6 +204,8 @@ def fixed_containers_multi(
                     inner_h=int(row["inner_h"]),
                     max_payload=float(row["max_payload"]),
                     volume_m3=float(row.get("volume") or 0),
+                    freight_price=float(row.get("freight_price") or 0),
+                    max_stack_layers=row.get("max_stack_layers"),
                 )
             )
     return out

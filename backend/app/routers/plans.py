@@ -174,3 +174,23 @@ def adopt_plan(
     TaskRepo(conn).update(tid, {"adopted_plan_id": plan_id})
     conn.commit()
     return ok({"adopted_plan_id": plan_id})
+
+
+@router.delete("/api/tasks/{tid}/runs")
+def clear_runs(tid: int, conn=Depends(get_conn)):
+    TaskRepo(conn).get(tid)
+    conn.execute(
+        """
+        DELETE FROM packing_plan
+        WHERE id IN (
+            SELECT p.id FROM packing_plan p
+            JOIN packing_run r ON r.id = p.run_id
+            WHERE r.task_id = ?
+        )
+        """,
+        (tid,),
+    )
+    conn.execute("DELETE FROM packing_run WHERE task_id = ?", (tid,))
+    TaskRepo(conn).update(tid, {"adopted_plan_id": None})
+    conn.commit()
+    return ok(None)

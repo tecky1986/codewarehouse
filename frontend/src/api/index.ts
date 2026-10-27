@@ -52,6 +52,8 @@ export const Tasks = {
       method: "PUT",
       body: JSON.stringify({ plan_id: planId }),
     }),
+  clearRuns: (id: number) =>
+    req<null>(`/api/tasks/${id}/runs`, { method: "DELETE" }),
   importFile: async (id: number, file: File) => {
     const form = new FormData();
     form.append("file", file);
@@ -122,6 +124,7 @@ export interface ContainerKpi {
   load_seq_correct_ratio?: number;
   constraint_ok_ratio?: number;
   cg_offset_mm?: number;
+  freight_price?: number;
 }
 
 export interface OverallKpi {
@@ -134,6 +137,7 @@ export interface OverallKpi {
   unassigned_weight_kg: number;
   load_seq_correct_ratio?: number;
   constraint_ok_ratio?: number;
+  total_freight?: number;
   elapsed_s?: number;
   timed_out?: boolean;
 }
@@ -306,6 +310,8 @@ export interface ContainerType {
   max_payload: number;
   tare_weight?: number | null;
   volume?: number | null;
+  freight_price?: number | null;
+  max_stack_layers?: number | null;
   enabled?: number;
   remark?: string | null;
 }
@@ -362,6 +368,20 @@ export const Packages = {
     }),
   remove: (id: number) =>
     req<null>(`/api/packages/${id}`, { method: "DELETE" }),
+  templateUrl: () => "/api/packages/template",
+  exportUrl: () => "/api/packages/export",
+  importFile: async (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    const r = await fetch("/api/packages/import", { method: "POST", body: form });
+    const body = (await r.json()) as ApiEnvelope<{
+      saved: PackageMaster[];
+      saved_count: number;
+      skipped: number;
+    }>;
+    if (!isOk(body)) throw new Error(body.message);
+    return body.data;
+  },
 };
 
 export const Settings = {

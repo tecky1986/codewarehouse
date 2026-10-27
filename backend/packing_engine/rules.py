@@ -9,7 +9,7 @@ ctx = CheckContext with:
 
 from dataclasses import dataclass, field
 
-from packing_engine.geometry import EPS, inner_face_min, rests_on, supports, x_range_union
+from packing_engine.geometry import EPS, inner_face_min, rests_on, supports, x_range_union, y_row_count, x_overlap, y_overlap
 from packing_engine.model import Candidate, effective_loading
 
 
@@ -64,6 +64,73 @@ def chk_collision(cand: Candidate, ctx: CheckContext):
 def chk_payload(cand: Candidate, ctx: CheckContext):
     if cand.container.used_payload + cand.item.gross > cand.container.max_payload + EPS:
         return "超过最大载重"
+    return None
+
+
+def chk_stack_support(cand: Candidate, ctx: CheckContext):
+    """Elevated cargo must rest on 1 or 2 rows of equal-height supports."""
+    if cand.z <= EPS:
+        return None
+    under = supports(ctx.placed, cand)
+    if not under:
+        return "堆叠缺少支撑"
+    ref_h = under[0].dz
+    if any(abs(p.dz - ref_h) > EPS for p in under):
+        return "被压货物高度不一致"
+    if y_row_count(under) > 2:
+        return "堆叠不得超过两排"
+    return None
+
+
+def _stack_depth(placed: list, x: float, y: float, dx: float, dy: float) -> int:
+    """Count the maximum stacking height (number of layers) at (x, y).
+
+    Walks the support chain upward from the floor, counting each distinct
+    z-level that has overlapping cargo at this footprint.
+    """
+    levels: set[float] = set()
+    z = 0.0
+    # follow the vertical stack: find all placed items that occupy (x, y)
+    # at each z-level, moving upward
+    guard = 0
+    while guard < 64:
+        guard += 1
+        found = False
+        for p in placed:
+            if (
+                abs(p.z - z) < EPS
+                and x_overlap(x, dx, p.x, p.dx)
+                and y_overlap(y, dy, p.y, p.dy)
+            ):
+                levels.add(round(z, 3))
+                z = p.z + p.dz
+                found = True
+                break
+        if not found:
+            break
+    return len(levels)
+
+
+def chk_max_stack_layers(cand: Candidate, ctx: CheckContext):
+    """Enforce per-item max_stack and container-level max_stack_layers.
+
+    The effective limit is the minimum of the two (None means unlimited).
+    Counts the stacking depth at the candidate footprint before placement;
+    adding this item would create one more level.
+    """
+    item = cand.item
+    item_limit = item.max_stack
+    cont_limit = cand.container.max_stack_layers
+    limit = None
+    if item_limit is not None:
+        limit = item_limit
+    if cont_limit is not None:
+        limit = cont_limit if limit is None else min(limit, cont_limit)
+    if limit is None:
+        return None
+    depth = _stack_depth(ctx.placed, cand.x, cand.y, cand.dx, cand.dy)
+    if depth + 1 > limit:
+        return f"超过最大堆码层数（上限 {limit} 层）"
     return None
 
 
@@ -139,6 +206,8 @@ CHECKERS = {
     "bounds": chk_bounds,
     "collision": chk_collision,
     "payload": chk_payload,
+    "stack_support": chk_stack_support,
+    "max_stack_layers": chk_max_stack_layers,
     "weight_order": chk_weight_order,
     "crush": chk_crush,
     "same_type_stack": chk_same_type_stack,
@@ -159,7 +228,7 @@ def run_checkers(
     The hard rules (bounds/collision/payload) are always enforced regardless
     of the enabled list; the business rules follow the enabled list.
     """
-    hard = ["bounds", "collision", "payload"]
+    hard = ["bounds", "collision", "payload", "stack_support"]
     if enabled_rules is None:
         soft = [r for r in CHECKERS if r not in hard]
     else:

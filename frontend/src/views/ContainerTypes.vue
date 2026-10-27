@@ -18,6 +18,8 @@ const emptyForm = () => ({
   door_h: 2280,
   max_payload: 28200,
   tare_weight: 0,
+  freight_price: 0,
+  max_stack_layers: null as number | null,
   enabled: 1,
   remark: "",
 });
@@ -52,6 +54,8 @@ function startEdit(t: ContainerType) {
     door_h: t.door_h ?? 0,
     max_payload: t.max_payload,
     tare_weight: t.tare_weight ?? 0,
+    freight_price: t.freight_price ?? 0,
+    max_stack_layers: (t as any).max_stack_layers ?? null,
     enabled: t.enabled ?? 1,
     remark: t.remark || "",
   };
@@ -120,6 +124,8 @@ onMounted(load);
         <label>门高mm <input type="number" v-model.number="form.door_h" /></label>
         <label>最大载重kg <input type="number" v-model.number="form.max_payload" /></label>
         <label>箱自重kg <input type="number" v-model.number="form.tare_weight" /></label>
+        <label>单箱运费 <input type="number" step="0.01" v-model.number="form.freight_price" /></label>
+        <label>最大堆码层数 <input type="number" v-model.number="form.max_stack_layers" placeholder="留空表示不限" /></label>
         <label class="enb">启用 <input type="checkbox" v-model="form.enabled" :true-value="1" :false-value="0" /></label>
         <label class="wide">备注 <input v-model="form.remark" /></label>
       </div>
@@ -138,6 +144,8 @@ onMounted(load);
             <th>内长×宽×高 mm</th>
             <th>容积m³</th>
             <th>最大载重kg</th>
+            <th>最大堆码层数</th>
+            <th>单箱运费</th>
             <th>状态</th>
             <th></th>
           </tr>
@@ -149,6 +157,8 @@ onMounted(load);
             <td>{{ t.inner_l }}×{{ t.inner_w }}×{{ t.inner_h }}</td>
             <td>{{ vol(t) }}</td>
             <td>{{ t.max_payload }}</td>
+            <td>{{ (t as any).max_stack_layers != null ? (t as any).max_stack_layers : "—" }}</td>
+            <td>{{ t.freight_price != null ? t.freight_price : "—" }}</td>
             <td>{{ t.enabled ? "启用" : "停用" }}</td>
             <td class="ops">
               <button @click="startEdit(t)">编辑</button>

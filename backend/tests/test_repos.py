@@ -1,7 +1,7 @@
 import pytest
 
 from app.errors import ConflictError, InUseError, NotFoundError
-from app.repos import ContainerTypeRepo, PackageMasterRepo, TaskRepo
+from app.repos import ContainerTypeRepo, PackageMasterRepo, TaskRepo, pn_wildcard_match
 
 
 def test_container_type_unique_code(conn):
@@ -107,3 +107,66 @@ def test_package_pn_unique_when_filled(conn):
     blank1 = repo.create({"pn": None, "name": "tmp-a"})
     blank2 = repo.create({"pn": None, "name": "tmp-b"})
     assert blank1["id"] != blank2["id"]
+
+
+# ---- PN wildcard matching -----------------------------------------------
+
+def test_wildcard_match_fn():
+    # ? = any number of any chars
+    assert pn_wildcard_match("ACW?80", "ACW108149080")
+    assert pn_wildcard_match("ACW?", "ACW")
+    assert pn_wildcard_match("A?B", "AB")
+    assert pn_wildcard_match("A?B", "A123B")
+    assert not pn_wildcard_match("A?B", "A123C")
+    # # = exactly one char per #
+    assert pn_wildcard_match("AB#CD", "ABxCD")
+    assert not pn_wildcard_match("AB#CD", "AB12CD")
+    assert pn_wildcard_match("AB##CD", "AB12CD")
+    assert not pn_wildcard_match("AB##CD", "AB1CD")
+    assert pn_wildcard_match("A##B", "A12B")
+    # no wildcards = exact only
+    assert pn_wildcard_match("EXACT", "EXACT")
+    assert not pn_wildcard_match("EXACT", "exact")
+    assert not pn_wildcard_match("AB", "ABC")
+    # combined
+    assert pn_wildcard_match("A?##B", "AX12B")
+    assert not pn_wildcard_match("A?##B", "AX1B4")
+
+
+def test_get_by_pn_wildcard(conn):
+    repo = PackageMasterRepo(conn)
+    # exact PN wins over wildcard
+    exact = repo.create({"pn": "ACW1081", "name": "exact-match", "l": 100, "w": 100, "h": 100})
+    # ? wildcard: ACW?1 matches ACW101, ACW1081, ACW9991, etc.
+    wild_q = repo.create({"pn": "ACW?1", "name": "q-match", "l": 200, "w": 200, "h": 200})
+    # # wildcard: P#N## matches P1N23 (one # = one char, two ## = two chars)
+    multi = repo.create({"pn": "P#N##", "name": "multi-hash", "l": 300, "w": 300, "h": 300})
+
+    # exact match still works and takes priority
+    r = repo.get_by_pn("ACW1081")
+    assert r["id"] == exact["id"]
+
+    # ? wildcard matches any-length fill
+    r2 = repo.get_by_pn("ACW1091")
+    assert r2["id"] == wild_q["id"]
+    assert r2["name"] == "q-match"
+
+    # # multi-char pattern
+    r3 = repo.get_by_pn("P1N23")
+    assert r3["id"] == multi["id"]
+    assert r3["name"] == "multi-hash"
+
+    # no match
+    assert repo.get_by_pn("ZZZZZ") is None
+    assert repo.get_by_pn("") is None
+
+
+def test_upsert_does_not_match_wildcard(conn):
+    repo = PackageMasterRepo(conn)
+    # ? matches any chars: ABC?DEF matches ABC1DEF, ABCDEF, ABC123456DEF, etc.
+    repo.create({"pn": "ABC?DEF", "name": "wild", "l": 1, "w": 1, "h": 1})
+    # upserting an exact PN should create a NEW row, not update the wildcard
+    created = repo.upsert({"pn": "ABC1DEF", "name": "new", "l": 2, "w": 2, "h": 2})
+    rows = repo.list_all()
+    assert len(rows) == 2
+    assert any(r["pn"] == "ABC1DEF" for r in rows)

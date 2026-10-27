@@ -1,9 +1,49 @@
 import json
+import re
 import sqlite3
 from datetime import datetime, timezone
 from typing import Any
 
 from app.errors import ConflictError, InUseError, NotFoundError
+
+_WILDCARD_RE = re.compile(r"[?#]")
+
+
+def _pn_regex(pn: str) -> re.Pattern:
+    """Convert a PN pattern with ? / # wildcards to an anchored regex.
+
+    ? matches any number of any characters (greedy, = .*).
+    # matches exactly one arbitrary character."""
+    parts: list[str] = []
+    i = 0
+    while i < len(pn):
+        c = pn[i]
+        if c == "?":
+            # run of consecutive ? = one .* (greedy)
+            while i < len(pn) and pn[i] == "?":
+                i += 1
+            parts.append(".*")
+        elif c == "#":
+            # run of consecutive # = that many .
+            j = i
+            while j < len(pn) and pn[j] == "#":
+                j += 1
+            parts.append("." * (j - i))
+            i = j
+        else:
+            j = i
+            while j < len(pn) and pn[j] not in ("?", "#"):
+                j += 1
+            parts.append(re.escape(pn[i:j]))
+            i = j
+    return re.compile("".join(parts) + "$")
+
+
+def pn_wildcard_match(pattern: str, pn: str) -> bool:
+    """Return True when *pn* matches *pattern*.
+    ? matches any number of any characters (greedy);
+    # matches exactly one arbitrary character (one # per char)."""
+    return bool(_pn_regex(pattern).match(pn))
 
 
 def _row(r: sqlite3.Row | None) -> dict | None:
@@ -53,7 +93,9 @@ class ContainerTypeRepo:
             "max_payload",
             "tare_weight",
             "volume",
+            "freight_price",
             "enabled",
+            "max_stack_layers",
             "remark",
         )
         values = [data.get(c) for c in cols]
@@ -63,6 +105,8 @@ class ContainerTypeRepo:
             values[cols.index("volume")] = _volume_m3(
                 data["inner_l"], data["inner_w"], data["inner_h"]
             )
+        if values[cols.index("freight_price")] is None:
+            values[cols.index("freight_price")] = 0.0
         cur = self.conn.execute(
             f"INSERT INTO container_type ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
             values,
@@ -88,7 +132,9 @@ class ContainerTypeRepo:
             "max_payload",
             "tare_weight",
             "volume",
+            "freight_price",
             "enabled",
+            "max_stack_layers",
             "remark",
         ]
         merged = {k: data[k] if k in data else existing[k] for k in fields}
@@ -98,7 +144,7 @@ class ContainerTypeRepo:
             """UPDATE container_type SET
                code=?, name=?, iso_code=?, inner_l=?, inner_w=?, inner_h=?,
                door_w=?, door_h=?, max_payload=?, tare_weight=?, volume=?,
-               enabled=?, remark=? WHERE id=?""",
+               freight_price=?, enabled=?, max_stack_layers=?, remark=? WHERE id=?""",
             [merged[k] for k in fields] + [cid],
         )
         self.conn.commit()
@@ -136,25 +182,65 @@ class PackageMasterRepo:
             raise NotFoundError("package not found")
         return row
 
-    def get_by_pn(self, pn: str) -> dict | None:
+    def _get_pn_exact(self, pn: str) -> dict | None:
+        """Pure exact-string lookup, no wildcard expansion."""
         if not pn:
             return None
         return _row(self.conn.execute("SELECT * FROM package_master WHERE pn = ?", (pn,)).fetchone())
 
-    def get_by_packmatls(self, name: str) -> dict | None:
-        if not name:
+    def get_by_pn(self, pn: str) -> dict | None:
+        """Exact PN lookup, falling back to ? / # wildcard patterns.
+
+        A wildcard master PN (containing ? or #) matches an upload PN
+        when each ? / # consumes exactly one character of the upload PN.
+        Exact matches take priority over wildcard ones."""
+        if not pn:
             return None
+        row = self._get_pn_exact(pn)
+        if row:
+            return row
+        # wildcard fallback: scan enabled masters whose PN carries ? or #
+        patterns = _rows(
+            self.conn.execute(
+                """SELECT * FROM package_master
+                   WHERE enabled = 1 AND (pn LIKE '%?%' OR pn LIKE '%#%')
+                   ORDER BY id"""
+            )
+        )
+        for p in patterns:
+            pat_pn = p.get("pn")
+            if pat_pn and pn_wildcard_match(pat_pn, pn):
+                return p
+        return None
+
+    def get_by_packmatls(self, packmatls: str, pn: str | None = None) -> dict | None:
+        """Match by (package_type/name, pn). pn=None means dual-field match:
+        only master records without PN qualify (a row lacking PN can only be
+        filled by a packaging record that itself has no PN)."""
+        if not packmatls:
+            return None
+        if pn:
+            return _row(
+                self.conn.execute(
+                    """SELECT * FROM package_master
+                       WHERE package_type = ? AND pn = ? ORDER BY id LIMIT 1""",
+                    (packmatls, pn),
+                ).fetchone()
+            )
         return _row(
             self.conn.execute(
-                "SELECT * FROM package_master WHERE package_type = ? OR name = ? ORDER BY id LIMIT 1",
-                (name, name),
+                """SELECT * FROM package_master
+                   WHERE (package_type = ? OR name = ?)
+                     AND (pn IS NULL OR pn = '')
+                   ORDER BY id LIMIT 1""",
+                (packmatls, packmatls),
             ).fetchone()
         )
 
     def create(self, data: dict) -> dict:
         pn = data.get("pn")
         if pn:
-            if self.get_by_pn(pn):
+            if self._get_pn_exact(pn):
                 raise ConflictError(f"PN already exists: {pn}")
         cols = (
             "pn",
@@ -192,7 +278,7 @@ class PackageMasterRepo:
     def update(self, pid: int, data: dict) -> dict:
         existing = self.get(pid)
         if data.get("pn") and data["pn"] != existing["pn"]:
-            other = self.get_by_pn(data["pn"])
+            other = self._get_pn_exact(data["pn"])
             if other:
                 raise ConflictError(f"PN already exists: {data['pn']}")
         fields = [
@@ -223,6 +309,17 @@ class PackageMasterRepo:
         )
         self.conn.commit()
         return self.get(pid)
+
+    def upsert(self, data: dict) -> dict:
+        existing = None
+        if data.get("pn"):
+            existing = self._get_pn_exact(data["pn"])
+        pack = data.get("name") or data.get("package_type")
+        if existing is None and pack:
+            existing = self.get_by_packmatls(pack, data.get("pn"))
+        if existing:
+            return self.update(existing["id"], data)
+        return self.create(data)
 
     def delete(self, pid: int) -> None:
         self.get(pid)

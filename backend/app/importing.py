@@ -117,11 +117,14 @@ def complete_rows(conn, rows: list[dict]) -> list[dict]:
         missing_dim = any(row.get(k) is None for k in DIM_FIELDS)
         master = None
         if missing_dim:
-            pn = row.get("k_pn")
+            pn = _str(row.get("k_pn"))
+            pack = _str(row.get("g_packmatls"))
             if pn:
                 master = pkg.get_by_pn(pn)
-            if master is None and row.get("g_packmatls"):
-                master = pkg.get_by_packmatls(row["g_packmatls"])
+            if master is None and pack:
+                # dual-field match: packing material + PN; a row without PN can
+                # only be filled by a master record that has no PN of its own
+                master = pkg.get_by_packmatls(pack, pn)
             if master and master.get("enabled", 1):
                 source = "master"
                 for field, mkey in MASTER_DIM.items():
@@ -191,37 +194,6 @@ def pending_fill_workbook(rows: list[dict]) -> bytes:
 
 
 def parse_maintain_xlsx(content: bytes) -> list[dict]:
-    wb = load_workbook(BytesIO(content), data_only=True)
-    ws = wb.active
-    rows = list(ws.iter_rows(values_only=True))
-    if not rows:
-        return []
-    headers = [str(h).strip() if h is not None else "" for h in rows[0]]
-    out = []
-    for raw in rows[1:]:
-        if raw is None or all(v is None or v == "" for v in raw):
-            continue
-        item = {}
-        for i, h in enumerate(headers):
-            if i < len(raw):
-                item[h] = raw[i]
-        pn = item.get("PN") or item.get("pn")
-        pack = item.get("PackMatls") or item.get("packmatls")
-        l_cm = _num(item.get("长cm") or item.get("l") or item.get("长"))
-        w_cm = _num(item.get("宽cm") or item.get("w") or item.get("宽"))
-        h_cm = _num(item.get("高cm") or item.get("h") or item.get("高"))
-        out.append(
-            {
-                "pn": _str(pn),
-                "name": _str(pack),
-                "package_type": _str(pack),
-                "l": int(l_cm * 10) if l_cm is not None else None,
-                "w": int(w_cm * 10) if w_cm is not None else None,
-                "h": int(h_cm * 10) if h_cm is not None else None,
-                "tare": _num(item.get("箱重kg") or item.get("tare")),
-                "net": _num(item.get("净重kg") or item.get("net")),
-                "gross": _num(item.get("毛重kg") or item.get("gross")),
-                "enabled": 1,
-            }
-        )
-    return out
+    from app.excel_io import import_packages
+
+    return import_packages(content)

@@ -10,6 +10,7 @@ PRESET_CONTAINER_TYPES = [
         "door_h": 2280,
         "max_payload": 28200,
         "tare_weight": 2200,
+        "freight_price": 0,
         "enabled": 1,
         "remark": "preset",
     },
@@ -24,6 +25,7 @@ PRESET_CONTAINER_TYPES = [
         "door_h": 2280,
         "max_payload": 26700,
         "tare_weight": 3800,
+        "freight_price": 0,
         "enabled": 1,
         "remark": "preset",
     },
@@ -38,6 +40,7 @@ PRESET_CONTAINER_TYPES = [
         "door_h": 2585,
         "max_payload": 26700,
         "tare_weight": 3900,
+        "freight_price": 0,
         "enabled": 1,
         "remark": "preset",
     },
@@ -140,7 +143,7 @@ def seed_if_empty(conn, with_sample: bool = True) -> None:
     for item in SAMPLE_PACKAGES:
         pn = item.get("pn")
         if pn:
-            if not pkg.get_by_pn(pn):
+            if not pkg._get_pn_exact(pn):
                 pkg.create(item)
         else:
             if not pkg.get_by_packmatls(item["package_type"]):

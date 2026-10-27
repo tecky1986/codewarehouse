@@ -151,6 +151,68 @@ def test_kpi_overall_recomputable_from_per_container():
     assert overall["constraint_ok_ratio"] == 1.0
 
 
+def test_stack_support_uses_one_or_two_equal_rows():
+    box = _box(L=1000, W=2000, H=2000, payload=100000)
+    base_a = _item("a", 1000, 1000, 500, 100, rotatable=False)
+    base_b = _item("b", 1000, 1000, 500, 100, rotatable=False)
+    top = _item("top", 1000, 2000, 400, 100, rotatable=False)
+    ctx = CheckContext(settings={}, placed=[
+        Candidate(item=base_a, container=box, x=0, y=0, z=0, dx=1000, dy=1000, dz=500, load_seq=1),
+        Candidate(item=base_b, container=box, x=0, y=1000, z=0, dx=1000, dy=1000, dz=500, load_seq=2),
+    ])
+    cand = Candidate(item=top, container=box, x=0, y=0, z=500, dx=1000, dy=2000, dz=400, load_seq=3)
+    assert run_checkers(cand, ctx, ["stack_support"]) == []
+
+
+def test_stack_support_rejects_unequal_support_heights():
+    box = _box(L=1000, W=2000, H=2000, payload=100000)
+    base_a = _item("a", 1000, 1000, 500, 100, rotatable=False)
+    base_b = _item("b", 1000, 1000, 400, 100, rotatable=False)
+    top = _item("top", 1000, 2000, 400, 100, rotatable=False)
+    ctx = CheckContext(settings={}, placed=[
+        Candidate(item=base_a, container=box, x=0, y=0, z=0, dx=1000, dy=1000, dz=500, load_seq=1),
+        Candidate(item=base_b, container=box, x=0, y=1000, z=100, dx=1000, dy=1000, dz=400, load_seq=2),
+    ])
+    cand = Candidate(item=top, container=box, x=0, y=0, z=500, dx=1000, dy=2000, dz=400, load_seq=3)
+    assert ("stack_support", "被压货物高度不一致") in run_checkers(cand, ctx, ["stack_support"])
+
+
+def test_load_seq_starts_from_innermost_lowest_width_side():
+    box = _box(L=3000, W=2000, H=2000, payload=100000)
+    from packing_engine.place import assign_load_seq_public as assign_load_seq
+
+    box.placed.append(Candidate(item=_item("inner", 1000, 1000, 1000, 100, rotatable=False), container=box, x=2000, y=0, z=0, dx=1000, dy=1000, dz=1000, load_seq=99))
+    box.placed.append(Candidate(item=_item("top", 1000, 1000, 500, 100, rotatable=False), container=box, x=2000, y=0, z=1000, dx=1000, dy=1000, dz=500, load_seq=98))
+    box.placed.append(Candidate(item=_item("side", 1000, 1000, 1000, 100, rotatable=False), container=box, x=2000, y=1000, z=0, dx=1000, dy=1000, dz=1000, load_seq=97))
+    box.placed.append(Candidate(item=_item("door", 1000, 1000, 1000, 100, rotatable=False), container=box, x=1000, y=0, z=0, dx=1000, dy=1000, dz=1000, load_seq=96))
+
+    assign_load_seq([box])
+    seq = {p.item.uid: p.load_seq for p in box.placed}
+    assert seq["inner"] == 1
+    assert seq["side"] == 2
+    assert seq["top"] == 3
+    assert seq["door"] == 4
+
+
+def test_dblf_fills_width_row_before_top():
+    box = _box(L=1000, W=2000, H=2000, payload=100000)
+    items = [
+        _item("a", 1000, 1000, 1000, 100, rotatable=False),
+        _item("b", 1000, 1000, 1000, 100, rotatable=False),
+        _item("top", 1000, 2000, 500, 100, rotatable=False),
+    ]
+    rep = ProgressReporter(total=len(items), deadline_s=5)
+    plan = ALGORITHMS["dblf"](items, [box], {"time_limit_s": 5}, [], [], rep)
+    assert not plan.unassigned
+    seq = {p.item.uid: p.load_seq for p in box.placed}
+    assert seq["a"] == 1
+    assert seq["b"] == 2
+    assert seq["top"] == 3
+    by_uid = {p.item.uid: p for p in box.placed}
+    assert by_uid["top"].z == 1000
+    assert by_uid["top"].dy == 2000
+
+
 def test_dblf_unassigned_when_no_space():
     box = _box(L=1000, W=1000, H=1000, payload=10000)
     items = [
@@ -164,6 +226,25 @@ def test_dblf_unassigned_when_no_space():
     assert plan.unassigned[0].uid == "b"
 
 
+def test_wall_build_fills_width_row_before_top():
+    box = _box(L=1000, W=2000, H=2000, payload=100000)
+    items = [
+        _item("a", 1000, 1000, 1000, 100, rotatable=False),
+        _item("b", 1000, 1000, 1000, 100, rotatable=False),
+        _item("top", 1000, 2000, 500, 100, rotatable=False),
+    ]
+    rep = ProgressReporter(total=len(items), deadline_s=5)
+    plan = ALGORITHMS["wall_build"](items, [box], {"time_limit_s": 5}, [], [], rep)
+    assert not plan.unassigned
+    seq = {p.item.uid: p.load_seq for p in box.placed}
+    assert seq["a"] == 1
+    assert seq["b"] == 2
+    assert seq["top"] == 3
+    by_uid = {p.item.uid: p for p in box.placed}
+    assert by_uid["top"].z == 1000
+    assert by_uid["top"].dy == 2000
+
+
 def test_timeout_marks_partial_plan():
     box = _box()
     items = [_item(f"i{i}", 500, 500, 500, 10) for i in range(50)]
@@ -171,3 +252,94 @@ def test_timeout_marks_partial_plan():
     plan = ALGORITHMS["dblf"](items, [box], {"time_limit_s": 0.000001}, [], [], rep)
     assert plan.timed_out is True
     assert 0 < len(box.placed) < len(items) or len(box.placed) + len(plan.unassigned) == len(items)
+
+
+# ---- max_stack_layers rule --------------------------------------------
+
+def test_max_stack_layers_rule_item_limit():
+    box = _box()
+    it1 = CargoItem(uid="b", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
+                    gross=10, net=10, max_stack=2, rotatable=False)
+    it2 = CargoItem(uid="t", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
+                    gross=10, net=10, max_stack=2, rotatable=False)
+    ctx = CheckContext(settings={}, placed=[
+        Candidate(item=it1, container=box, x=0, y=0, z=0, dx=1000, dy=1000, dz=500, load_seq=1),
+        Candidate(item=CargoItem(uid="b2", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
+                                  gross=10, net=10, max_stack=2, rotatable=False),
+                  container=box, x=0, y=0, z=500, dx=1000, dy=1000, dz=500, load_seq=2),
+    ])
+    cand = Candidate(item=it2, container=box, x=0, y=0, z=1000, dx=1000, dy=1000, dz=500, load_seq=3)
+    v = run_checkers(cand, ctx, ["max_stack_layers"])
+    assert ("max_stack_layers", "超过最大堆码层数（上限 2 层）") in v
+
+
+def test_max_stack_layers_rule_container_limit():
+    box = _box()
+    box.max_stack_layers = 2
+    it = CargoItem(uid="t", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
+                   gross=10, net=10, rotatable=False)
+    ctx = CheckContext(settings={}, placed=[
+        Candidate(item=CargoItem(uid="b", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
+                                  gross=10, net=10, rotatable=False),
+                  container=box, x=0, y=0, z=0, dx=1000, dy=1000, dz=500, load_seq=1),
+        Candidate(item=CargoItem(uid="b2", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
+                                  gross=10, net=10, rotatable=False),
+                  container=box, x=0, y=0, z=500, dx=1000, dy=1000, dz=500, load_seq=2),
+    ])
+    cand = Candidate(item=it, container=box, x=0, y=0, z=1000, dx=1000, dy=1000, dz=500, load_seq=3)
+    v = run_checkers(cand, ctx, ["max_stack_layers"])
+    assert ("max_stack_layers", "超过最大堆码层数（上限 2 层）") in v
+
+
+def test_max_stack_layers_no_violation_within_limit():
+    box = _box()
+    box.max_stack_layers = 3
+    it = CargoItem(uid="t", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
+                   gross=10, net=10, rotatable=False)
+    ctx = CheckContext(settings={}, placed=[
+        Candidate(item=CargoItem(uid="b", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
+                                  gross=10, net=10, rotatable=False),
+                  container=box, x=0, y=0, z=0, dx=1000, dy=1000, dz=500, load_seq=1),
+    ])
+    cand = Candidate(item=it, container=box, x=0, y=0, z=500, dx=1000, dy=1000, dz=500, load_seq=2)
+    assert run_checkers(cand, ctx, ["max_stack_layers"]) == []
+
+
+# ---- PN wildcard matching in normalize ----------------------------------
+
+def test_normalize_pn_wildcard_match():
+    from packing_engine.normalize import items_from_rows, _match_pn
+
+    # ? matches any number of any chars
+    assert _match_pn("ACW1081", "ACW?")
+    assert _match_pn("ACW1081490", "ACW?")
+    assert _match_pn("ACW", "ACW?")
+    assert not _match_pn("BACW", "ACW?")
+    # # matches exactly one char per #
+    assert _match_pn("AB1CD", "AB#CD")
+    assert not _match_pn("ABCD", "AB#CD")
+    assert _match_pn("AB12CD", "AB##CD")
+    assert not _match_pn("AB1CD", "AB##CD")
+    # no wildcard = exact only
+    assert _match_pn("ACW1081", "ACW1081")
+    assert not _match_pn("ACW10814", "ACW1081")
+    # combined ? and #
+    assert _match_pn("A12X345B", "A?#B")
+    assert not _match_pn("A12X345C", "A?#B")
+
+    # items_from_rows picks up rule attributes from wildcard master
+    packages = [
+        {"pn": "ACW?1", "name": "WILD", "rotatable": 0, "crush_sensitive": 1,
+         "same_type_stack": 1, "max_stack": 3, "default_loading": "forklift"},
+    ]
+    rows = [{"id": 1, "row_no": 1, "k_pn": "ACW1081", "g_packmatls": None,
+             "b_len": 1000, "c_wid": 500, "d_hgt": 300, "h_tare": 10, "i_net": 20,
+             "j_gross": 30, "complete": True}]
+    items = items_from_rows(rows, packages)
+    assert len(items) == 1
+    it = items[0]
+    assert it.rotatable is False
+    assert it.crush_sensitive is True
+    assert it.same_type_stack is True
+    assert it.max_stack == 3
+    assert it.loading == "forklift"
