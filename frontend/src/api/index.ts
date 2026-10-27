@@ -311,6 +311,7 @@ export interface ContainerType {
   tare_weight?: number | null;
   volume?: number | null;
   freight_price?: number | null;
+  max_stack_layers?: number | null;
   enabled?: number;
   remark?: string | null;
 }

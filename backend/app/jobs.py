@@ -106,9 +106,9 @@ class JobsService:
                     "qty_lock": {code: n}, "max_qty": {code: n}}
 
         Legacy shape {"type_code": "40GP", "count": 2} maps to fixed mode.
-        In fixed mode, the count in `fixed` dict is treated as the upper
-        limit (max_qty) — the engine searches for the best number of
-        containers from 1..max_qty per type.
+        In fixed mode, the count in `fixed` dict is the upper limit
+        (max_qty). 0 means no upper limit — the engine estimates how
+        many instances to allocate from cargo volume/weight.
         """
         raw = task.get("container_mode_json")
         if isinstance(raw, str):
@@ -141,10 +141,10 @@ class JobsService:
             specs.append((code, n))
             max_qty[code] = n
         if not specs:
-            raise AppError("E_VALIDATION", "固定模式需指定箱型与数量", status=422)
+            raise AppError("E_VALIDATION", "固定模式需指定箱型", status=422)
         for code, n in specs:
-            if n < 1:
-                raise AppError("E_VALIDATION", f"箱型 {code} 数量必须 ≥ 1", status=422)
+            if n < 0:
+                raise AppError("E_VALIDATION", f"箱型 {code} 上限必须 ≥ 0（0 表示不设上限）", status=422)
         return {"mode": "fixed", "specs": specs, "max_qty": max_qty}
 
     def start(self, tid: int, body: dict | None) -> JobState:
@@ -282,11 +282,15 @@ class JobsService:
                 "max_qty": mode.get("max_qty"),
             }
         else:
-            # fixed mode: specs are upper limits; generate max_qty instances per
-            # type and let each solver fill them. Solvers fill from the back
-            # so the minimum number of containers is used naturally; KPI counts
-            # only containers that actually hold items.
-            base = normalize.fixed_containers_multi(mode["specs"], catalog)
+            # fixed mode: specs are upper limits (0 = unlimited). Generate
+            # that many instances per type and let each solver fill them.
+            # KPI counts only containers that actually hold items.
+            resolved = []
+            for code, n in mode["specs"]:
+                if n <= 0:
+                    n = self._estimate_count(items, catalog.get(code) or {})
+                resolved.append((code, n))
+            base = normalize.fixed_containers_multi(resolved, catalog)
             locks = None
 
         import packing_engine.kpi as kpi_mod
@@ -337,6 +341,7 @@ class JobsService:
             max_payload=float(row["max_payload"]),
             volume_m3=float(row.get("volume") or 0),
             freight_price=float(row.get("freight_price") or 0),
+            max_stack_layers=row.get("max_stack_layers"),
         )
 
     @staticmethod
@@ -353,6 +358,7 @@ class JobsService:
             max_payload=c.max_payload,
             volume_m3=c.volume_m3,
             freight_price=getattr(c, "freight_price", 0.0),
+            max_stack_layers=getattr(c, "max_stack_layers", None),
         )
 
     def _load_catalog(self) -> dict[str, dict]:
@@ -361,11 +367,17 @@ class JobsService:
         ).fetchall()
         return {r["code"]: dict(r) for r in rows}
 
-    def _load_catalog(self) -> dict[str, dict]:
-        rows = self.conn.execute(
-            "SELECT * FROM container_type WHERE enabled = 1"
-        ).fetchall()
-        return {r["code"]: dict(r) for r in rows}
+    @staticmethod
+    def _estimate_count(items: list, row: dict) -> int:
+        """How many containers to allocate when the user set no upper limit."""
+        vol = sum(i.volume_m3() for i in items)
+        gross = sum(getattr(i, "gross", 0) or 0 for i in items)
+        cap_vol = float(row.get("volume") or 0)
+        cap_pay = float(row.get("max_payload") or 0)
+        by_vol = int(-(-vol // cap_vol)) if cap_vol > 0 else 0
+        by_pay = int(-(-gross // cap_pay)) if cap_pay > 0 else 0
+        need = max(by_vol, by_pay, 1)
+        return need + 2
 
     def _worker_conn(self) -> sqlite3.Connection:
         """Return a dedicated connection for worker-thread persistence."""

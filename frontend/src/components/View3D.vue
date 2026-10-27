@@ -8,6 +8,7 @@ import {
   computed,
 } from "vue";
 import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import type { Placement, ContainerKpi } from "@/api";
 
 const props = defineProps<{
@@ -27,12 +28,14 @@ const playStep = ref(0);
 const speed = ref<0.5 | 1 | 2 | 4>(1);
 const showAll = ref(false);
 const maximized = ref(false);
+const fullscreen = ref(false);
 
 let scene: THREE.Scene | null = null;
 let camera: THREE.PerspectiveCamera | null = null;
 let renderer: THREE.WebGLRenderer | null = null;
 let containerGroup: THREE.Group | null = null;
 let outline: THREE.LineSegments | null = null;
+let controls: OrbitControls | null = null;
 let animId = 0;
 let playTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -43,9 +46,10 @@ const active = computed(
 const containerPlacements = computed(() => {
   if (!active.value) return [];
   const label = active.value.label;
-  return props.placements.filter(
-    (p) => p.container_id !== null && p.label === label,
-  );
+  return props.placements
+    .filter((p) => p.container_id !== null && p.label === label)
+    .slice()
+    .sort((a, b) => (a.load_seq ?? 0) - (b.load_seq ?? 0));
 });
 
 const totalSteps = computed(() => containerPlacements.value.length);
@@ -93,6 +97,12 @@ function buildScene() {
   containerGroup = new THREE.Group();
   scene.add(containerGroup);
 
+  controls = new OrbitControls(camera, canvasEl.value);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.minDistance = 10;
+  controls.maxDistance = 100000;
+
   canvasEl.value.addEventListener(
     "pointerdown",
     (ev: PointerEvent) => {
@@ -106,6 +116,7 @@ function buildScene() {
 
   function loop() {
     animId = requestAnimationFrame(loop);
+    controls?.update();
     renderer?.render(scene!, camera!);
   }
   loop();
@@ -180,7 +191,14 @@ function buildContainer3D() {
     const mesh = createBox(p);
     if (mesh) containerGroup.add(mesh);
   }
+}
 
+function resetView() {
+  if (!active.value) return;
+  const L = dims();
+  const shown = showAll.value
+    ? containerPlacements.value
+    : containerPlacements.value.slice(0, playStep.value + 1);
   centerOnBounds(shown, L);
 }
 
@@ -188,7 +206,7 @@ function centerOnBounds(
   placed: Placement[],
   L: { l: number; w: number; h: number },
 ) {
-  if (!camera || !scene) return;
+  if (!camera || !scene || !controls) return;
   const pts: THREE.Vector3[] = [];
   for (const p of placed) {
     pts.push(new THREE.Vector3(p.x, p.z, p.y));
@@ -204,6 +222,7 @@ function centerOnBounds(
   const center = bb.getCenter(new THREE.Vector3());
   const size = bb.getSize(new THREE.Vector3());
   const maxDim = Math.max(size.x, size.y, size.z, 1000);
+  controls.target.copy(center);
   const theta = 0.6;
   const phi = 0.4;
   const radius = maxDim * 1.4;
@@ -212,7 +231,9 @@ function centerOnBounds(
     center.y + radius * Math.cos(phi),
     center.z + radius * Math.sin(phi) * Math.cos(theta),
   );
-  camera.lookAt(center);
+  camera.near = Math.max(radius / 1000, 1);
+  camera.updateProjectionMatrix();
+  controls.update();
 }
 
 function highlight(p: Placement) {
@@ -307,27 +328,40 @@ function setSpeed(s: 0.5 | 1 | 2 | 4) {
 
 function onPointerDown(ev: PointerEvent) {
   if (!canvasEl.value || !camera) return;
-  const rect = canvasEl.value.getBoundingClientRect();
-  const mx = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
-  const my = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
-  const raycaster = new THREE.Raycaster();
-  raycaster.setFromCamera(new THREE.Vector2(mx, my), camera);
-  const meshes = containerGroup?.children.filter(
-    (c): c is THREE.Mesh => c instanceof THREE.Mesh,
-  );
-  const hits = raycaster.intersectObjects(meshes || []);
-  if (hits.length > 0) {
-    const p = hits[0].object.userData.p;
-    if (p) {
-      selected.value = p;
-      emit("select", p);
-      highlight(p);
+  const startX = ev.clientX;
+  const startY = ev.clientY;
+  let moved = false;
+  const onMove = (mev: PointerEvent) => {
+    if (Math.abs(mev.clientX - startX) > 4 || Math.abs(mev.clientY - startY) > 4) moved = true;
+  };
+  const onUp = () => {
+    canvasEl.value?.removeEventListener("pointermove", onMove);
+    canvasEl.value?.removeEventListener("pointerup", onUp);
+    if (moved) return;
+    const rect = canvasEl.value!.getBoundingClientRect();
+    const mx = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+    const my = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(new THREE.Vector2(mx, my), camera!);
+    const meshes = containerGroup?.children.filter(
+      (c): c is THREE.Mesh => c instanceof THREE.Mesh,
+    );
+    const hits = raycaster.intersectObjects(meshes || []);
+    if (hits.length > 0) {
+      const p = hits[0].object.userData.p;
+      if (p) {
+        selected.value = p;
+        emit("select", p);
+        highlight(p);
+      }
+    } else {
+      selected.value = null;
+      emit("select", null);
+      clearHighlight();
     }
-  } else {
-    selected.value = null;
-    emit("select", null);
-    clearHighlight();
-  }
+  };
+  canvasEl.value.addEventListener("pointermove", onMove);
+  canvasEl.value.addEventListener("pointerup", onUp);
 }
 
 function onPointerUp() {
@@ -336,7 +370,6 @@ function onPointerUp() {
 
 function onWheel(ev: WheelEvent) {
   ev.preventDefault();
-  /* zoom handled by camera radius */
 }
 
 function onResize() {
@@ -349,16 +382,27 @@ function onResize() {
   renderer.setSize(w, h);
 }
 
+function toggleFullscreen() {
+  fullscreen.value = !fullscreen.value;
+  if (fullscreen.value) {
+    document.body.style.overflow = "hidden";
+  } else {
+    document.body.style.overflow = "";
+  }
+  nextTick(() => onResize());
+}
+
 onMounted(async () => {
   await nextTick();
   buildScene();
-  rebuild();
+  resetView();
 });
 
 onBeforeUnmount(() => {
   stopPlayback();
   cancelAnimationFrame(animId);
   window.removeEventListener("resize", onResize);
+  controls?.dispose();
   renderer?.dispose();
 });
 
@@ -369,6 +413,7 @@ watch(
     playStep.value = 0;
     stopPlayback();
     rebuild();
+    resetView();
   },
   { deep: false },
 );
@@ -397,9 +442,12 @@ defineExpose({
       </button>
     </div>
 
-    <div class="canvas-wrap" :class="{ maximized }">
+    <div class="canvas-wrap" :class="{ maximized, fullscreen }">
       <canvas ref="canvasEl" class="canvas"></canvas>
       <div v-if="!active" class="empty">暂无集装箱</div>
+      <button @click="resetView" class="view-btn" title="复位视角">
+        复位视角
+      </button>
     </div>
 
     <div class="controls">
@@ -432,6 +480,9 @@ defineExpose({
       </label>
       <button @click="maximized = !maximized" :class="{ 'max-btn': true, active: maximized }" :title="maximized ? '退出最大化' : '最大化'" class="max-btn">
         {{ maximized ? "还原" : "最大化" }}
+      </button>
+      <button @click="toggleFullscreen" :class="{ 'max-btn': true, active: fullscreen }" :title="fullscreen ? '退出全屏' : '全屏'" class="max-btn">
+        {{ fullscreen ? "退出全屏" : "全屏" }}
       </button>
     </div>
 
@@ -487,6 +538,31 @@ defineExpose({
 .canvas-wrap.maximized {
   height: calc(100vh - 220px);
   min-height: 420px;
+}
+
+.canvas-wrap.fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  height: 100vh;
+  width: 100vw;
+  margin: 0;
+  border-radius: 0;
+  background: #111;
+}
+
+.view-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  padding: 6px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  font-size: 13px;
+  color: #333;
 }
 
 .max-btn {

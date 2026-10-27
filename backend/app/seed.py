@@ -143,7 +143,7 @@ def seed_if_empty(conn, with_sample: bool = True) -> None:
     for item in SAMPLE_PACKAGES:
         pn = item.get("pn")
         if pn:
-            if not pkg.get_by_pn(pn):
+            if not pkg._get_pn_exact(pn):
                 pkg.create(item)
         else:
             if not pkg.get_by_packmatls(item["package_type"]):

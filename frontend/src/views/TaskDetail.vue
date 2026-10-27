@@ -72,9 +72,12 @@ const modeSummary = computed(() => {
   const entries = Object.entries(fixed);
   if (entries.length) {
     const [code, n] = entries[0];
-    return `${code} × ${n}`;
+    return Number(n) > 0 ? `${code} ≤ ${n}` : `${code} 不限`;
   }
-  if (m.type_code) return `${m.type_code} × ${m.count ?? 1}`;
+  if (m.type_code) {
+    const n = m.count ?? 0;
+    return Number(n) > 0 ? `${m.type_code} ≤ ${n}` : `${m.type_code} 不限`;
+  }
   return null;
 });
 

@@ -16,6 +16,7 @@ CONTAINER_TYPE_HEADERS = [
     "tare_weight",
     "volume",
     "freight_price",
+    "max_stack_layers",
     "enabled",
     "remark",
 ]

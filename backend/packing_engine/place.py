@@ -11,9 +11,9 @@ Coordinate convention:
       * front face  -> new cap = x (items in front of it, door-ward)
       * side        -> same cap, y + dy
       * top         -> same cap, z + dz
-  - Candidate sort key: (y asc, cap desc, z asc): fill the y-row first,
-    then go deeper, then stack.
-  - load_seq grows with placement order: seq 1 is the deepest item.
+  - Candidate sort key: (-cap, z, y): fill the innermost wall first,
+    then from the floor up, then along the width.
+  - load_seq is rewritten after packing: innermost, then bottom-up, then y.
 """
 
 import time
@@ -137,13 +137,13 @@ def _try_place_at_cap(
 
 def _expand_candidates(candidates: list, cand: Candidate, prev_cap: float) -> None:
     for p in (
-        (cand.x, cand.y, cand.z),
         (prev_cap, cand.y + cand.dy, cand.z),
         (prev_cap, cand.y, cand.z + cand.dz),
+        (cand.x, cand.y, cand.z),
     ):
         if p not in candidates:
             candidates.append(p)
-    candidates.sort(key=lambda p: (p[1], -p[0], p[2]))
+    candidates.sort(key=lambda p: (-p[0], p[2], p[1]))
 
 
 def _eligible_containers(
@@ -221,7 +221,7 @@ def dblf(
     for item in ordered:
         if reporter.timed_out:
             rest = [i for i in ordered if i.uid not in seen_uids]
-            return Plan(algorithm="dblf", containers=containers, unassigned=rest, timed_out=True)
+            return _finish_plan("dblf", containers, rest, timed_out=True)
         chosen_cand = None
         for c in _eligible_containers(item, containers, ctx, t_groups, sep_sites):
             for (cap, y, z) in list(cands[id(c)]):
@@ -243,7 +243,7 @@ def dblf(
             unassigned.append(item)
         reporter.tick()
 
-    return Plan(algorithm="dblf", containers=containers, unassigned=unassigned)
+    return _finish_plan("dblf", containers, unassigned)
 
 
 # ---------------------------------------------------------------------------
@@ -320,7 +320,7 @@ def maximal_space(
     for item in ordered:
         if reporter.timed_out:
             rest = [i for i in ordered if i.uid not in seen_uids]
-            return Plan(algorithm="maxspace", containers=containers, unassigned=rest, timed_out=True)
+            return _finish_plan("maxspace", containers, rest, timed_out=True)
         best: tuple[float, Candidate, _Space] | None = None
         for c in _eligible_containers(item, containers, ctx, t_groups, sep_sites):
             check_ctx = CheckContext(settings=settings, placed=c.placed)
@@ -329,6 +329,7 @@ def maximal_space(
                     if dx > s.dx + 1e-9 or dy > s.dy + 1e-9 or dz > s.dz + 1e-9:
                         continue
                     x0 = s.x + max(0.0, s.dx - dx)
+                    score = (-x0, s.z, s.y, s.volume() / max(dx * dy * dz, 1e-9))
                     cand = Candidate(
                         item=item,
                         container=c,
@@ -342,7 +343,6 @@ def maximal_space(
                     )
                     if _first_violation(cand, ctx):
                         continue
-                    score = s.volume() / max(dx * dy * dz, 1e-9)
                     if best is None or score < best[0]:
                         best = (score, cand, s)
         if best is None:
@@ -357,7 +357,26 @@ def maximal_space(
                 ctx.group_container[item.site] = cand.container
         reporter.tick()
 
-    return Plan(algorithm="maxspace", containers=containers, unassigned=unassigned)
+    return _finish_plan("maxspace", containers, unassigned)
+
+
+def assign_load_seq(containers: list) -> None:
+    """Rewrite load_seq: innermost wall, then floor-up, then along width."""
+    for c in containers:
+        ordered = sorted(c.placed, key=lambda p: (-(p.x + p.dx), p.z, p.y, p.item.uid))
+        for i, p in enumerate(ordered, start=1):
+            p.load_seq = i
+        c.placed[:] = ordered
+
+
+def _finish_plan(algorithm: str, containers: list, unassigned: list, timed_out: bool = False) -> Plan:
+    assign_load_seq(containers)
+    return Plan(algorithm=algorithm, containers=containers, unassigned=unassigned, timed_out=timed_out)
+
+
+def assign_load_seq_public(containers: list) -> None:
+    """Public alias so other modules/tests can rewrite load_seq after packing."""
+    assign_load_seq(containers)
 
 
 ALGORITHMS = {

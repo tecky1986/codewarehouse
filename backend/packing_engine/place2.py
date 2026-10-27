@@ -7,7 +7,7 @@ item.x = cap - dx.
 
 from packing_engine.groups import order_items
 from packing_engine.model import Candidate, CargoItem, ContainerInstance, Plan
-from packing_engine.place import ProgressReporter, register
+from packing_engine.place import ProgressReporter, _finish_plan, register
 from packing_engine.rules import CheckContext, run_checkers
 
 
@@ -51,16 +51,17 @@ def _try_at_cap(
 
 
 def _advance_cursor(cand: Candidate, c: ContainerInstance) -> tuple[float, float, float]:
-    """Wall cursor after placing cand: advance door-ward, then y row, then z."""
-    x0 = cand.x
-    if x0 <= 1e-9:
-        y = cand.y + cand.dy
-        z = cand.z
-        if y + cand.dy > c.inner_w - 1e-9:
-            y = 0.0
-            z = cand.z + cand.dz
-        return (float(c.inner_l), y, z)
-    return (x0, cand.y, cand.z)
+    """Wall cursor after placing cand: fill width, then height, then new wall."""
+    cap = cand.x
+    y = cand.y + cand.dy
+    z = cand.z
+    if y >= c.inner_w - 1e-9:
+        y = 0.0
+        z = cand.z + cand.dz
+    if z >= c.inner_h - 1e-9:
+        cap = float(c.inner_l)
+        z = 0.0
+    return (cap, y, z)
 
 
 # ---------------------------------------------------------------------------
@@ -81,7 +82,7 @@ def extreme_point(
         if reporter.timed_out:
             rest = [i for i in order_items(items) if i.uid == item.uid]
             unassigned.extend(rest)
-            return Plan(algorithm="extreme_point", containers=containers, unassigned=unassigned, timed_out=True)
+            return _finish_plan("extreme_point", containers, unassigned, timed_out=True)
         placed = False
         for c in containers:
             caps = set()
@@ -90,7 +91,7 @@ def extreme_point(
                 caps.add((float(c.inner_l), p.y + p.dy, p.z))
                 caps.add((float(c.inner_l), p.y, p.z + p.dz))
             caps.add((float(c.inner_l), 0.0, 0.0))
-            points = sorted(caps, key=lambda pt: (pt[1], -pt[0], pt[2]))
+            points = sorted(caps, key=lambda pt: (-pt[0], pt[2], pt[1]))
             for (cap, y, z) in points:
                 cand = _try_at_cap(cap, y, z, item, c, settings, enabled_rules)
                 if cand is not None:
@@ -102,7 +103,7 @@ def extreme_point(
         if not placed:
             unassigned.append(item)
         reporter.tick()
-    return Plan(algorithm="extreme_point", containers=containers, unassigned=unassigned)
+    return _finish_plan("extreme_point", containers, unassigned)
 
 
 # ---------------------------------------------------------------------------
@@ -125,7 +126,7 @@ def wall_build(
         if reporter.timed_out:
             rest = [i for i in order_items(items) if i.uid == item.uid]
             unassigned.extend(rest)
-            return Plan(algorithm="wall_build", containers=containers, unassigned=unassigned, timed_out=True)
+            return _finish_plan("wall_build", containers, unassigned, timed_out=True)
         placed = False
         for c in containers:
             cap, y, z = cursors[id(c)]
@@ -142,7 +143,7 @@ def wall_build(
         if not placed:
             unassigned.append(item)
         reporter.tick()
-    return Plan(algorithm="wall_build", containers=containers, unassigned=unassigned)
+    return _finish_plan("wall_build", containers, unassigned)
 
 
 # ---------------------------------------------------------------------------
@@ -166,7 +167,7 @@ def guillotine(
         if reporter.timed_out:
             rest = [i for i in order_items(items) if i.uid == item.uid]
             unassigned.extend(rest)
-            return Plan(algorithm="guillotine", containers=containers, unassigned=unassigned, timed_out=True)
+            return _finish_plan("guillotine", containers, unassigned, timed_out=True)
         placed = False
         for c in containers:
             target = None
@@ -196,7 +197,7 @@ def guillotine(
         if not placed:
             unassigned.append(item)
         reporter.tick()
-    return Plan(algorithm="guillotine", containers=containers, unassigned=unassigned)
+    return _finish_plan("guillotine", containers, unassigned)
 
 
 register("extreme_point", extreme_point)

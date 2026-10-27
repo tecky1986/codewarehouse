@@ -29,7 +29,7 @@ const showGuide = ref(true);
 const mode = ref<"fixed" | "freemix">("fixed");
 // fixed: single type + upper limit (max qty)
 const fixedType = ref("");
-const fixedMaxQty = ref(1);
+const fixedMaxQty = ref(0);
 // freemix: type lock + qty lock + max
 const freemixTypeLock = ref<Record<string, boolean>>({});
 const freemixQtyLock = ref<Record<string, string>>({});
@@ -93,13 +93,13 @@ async function load() {
     const legacyMaxQty = (raw.max_qty as Record<string, number>) || {};
     if (legacyType && (raw.count != null || entries.length === 0)) {
       fixedType.value = legacyType;
-      fixedMaxQty.value = (legacyMaxQty[legacyType] ?? (raw.count as number) ?? 1);
+      fixedMaxQty.value = Number(legacyMaxQty[legacyType] ?? (raw.count as number) ?? 0);
     } else if (entries.length > 0) {
       fixedType.value = entries[0][0];
-      fixedMaxQty.value = legacyMaxQty[entries[0][0]] ?? entries[0][1];
+      fixedMaxQty.value = Number(legacyMaxQty[entries[0][0]] ?? entries[0][1] ?? 0);
     } else {
       fixedType.value = "";
-      fixedMaxQty.value = 1;
+      fixedMaxQty.value = 0;
     }
   }
   hasMode.value =
@@ -134,8 +134,8 @@ async function saveContainerMode() {
       modeError.value = "请选择一种箱型。";
       return;
     }
-    if (Number.isNaN(maxQty) || maxQty < 1 || !Number.isInteger(maxQty)) {
-      modeError.value = "箱型上限需为大于 0 的整数。";
+    if (Number.isNaN(maxQty) || maxQty < 0 || !Number.isInteger(maxQty)) {
+      modeError.value = "箱型上限需为 ≥ 0 的整数，0 表示不设上限。";
       return;
     }
     // fixed dict holds the upper limit; max_qty mirrors it for the engine
@@ -280,7 +280,7 @@ onMounted(load);
       </div>
 
       <div v-if="mode === 'fixed'" class="mode-body">
-        <div class="hint">选择一种箱型并填写数量上限（最多使用的箱数）。</div>
+        <div class="hint">选择一种箱型并填写数量上限；0 表示不设上限，按货量自动估算。</div>
         <div class="form-row" style="margin-top: 8px">
           <select v-model="fixedType">
             <option value="">选择箱型</option>
@@ -288,8 +288,8 @@ onMounted(load);
               {{ t.code }} — {{ t.name }}
             </option>
           </select>
-          <input type="number" v-model.number="fixedMaxQty" min="1" class="count" />
-          <span class="hint-inline">上限</span>
+          <input type="number" v-model.number="fixedMaxQty" min="0" class="count" />
+          <span class="hint-inline">上限（0 = 不限）</span>
         </div>
       </div>
 

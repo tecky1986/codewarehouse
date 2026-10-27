@@ -58,3 +58,19 @@ def inner_face_min(placed) -> float | None:
     if not placed:
         return None
     return min(p.x + p.dx for p in placed)
+
+
+def y_row_count(items) -> int:
+    """How many distinct width-rows `items` occupy (touching intervals count as separate rows)."""
+    if not items:
+        return 0
+    intervals = sorted((p.y, p.y + p.dy) for p in items)
+    n = 1
+    hi = intervals[0][1]
+    for lo, h in intervals[1:]:
+        if lo < hi - EPS:
+            hi = max(hi, h)
+            continue
+        n += 1
+        hi = h
+    return n
