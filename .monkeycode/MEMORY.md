@@ -56,6 +56,12 @@ Entries discovered by the Agent during task execution should follow this format:
   - If the latest Windows artifact already exists as a GitHub artifact for the current HEAD, download it and repackage it locally instead of attempting a local Windows PyInstaller build.
   - For releases, push the source branch first, then tag `vX.Y.Z` on the branch tip; the `Windows executable` workflow on tag push creates the GitHub release and attaches the dated Windows zip.
   - Verify the latest release by checking `releases/latest` assets and the tag-to-branch alignment before reporting completion.
+  - 拉取 Windows exe 到本地的标准做法（私有仓库，匿名下载 release 附件返回 404）：
+    - 用 git credential fill 取 github.com 的 token：`CRED=$(echo -e "protocol=https\nhost=github.com\n" | git credential fill 2>/dev/null)`，`TOKEN=$(echo "$CRED" | grep '^password=' | cut -d= -f2-)`。
+    - 先查 release 的 asset id：`curl -s -H "Authorization: Bearer $TOKEN" https://api.github.com/repos/<owner>/<repo>/releases/tags/<tag>` 取 `assets[0].id`。
+    - 走 API asset 端点下载（带 `Accept: application/octet-stream`）：`curl -L -o <dest>.zip -H "Authorization: Bearer $TOKEN" -H "Accept: application/octet-stream" https://api.github.com/repos/<owner>/<repo>/releases/assets/<id>`。
+    - 匿名 `curl` 直接打 `releases/download/<tag>/<file>.zip` 会 404（私有仓库对匿名隐藏 release），不要依赖它；token 只用于本次下载，勿写入任何项目文件。
+    - 下载后用 `unzip -l` 校验完整性，并用 `head -c 2 <exe> | od -An -tx1` 确认 PE 魔数 `4d 5a`。
 
 
 

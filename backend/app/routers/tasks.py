@@ -139,6 +139,33 @@ def batch_maintain(
     return ok(saved)
 
 
+@router.post("/{tid}/import/supplement")
+def import_supplement(tid: int, items: list[dict] = Body(...), conn=Depends(get_conn)):
+    TaskRepo(conn).get(tid)
+    pkg = PackageMasterRepo(conn)
+    saved = []
+    for it in items:
+        l, w, h = it.get("l"), it.get("w"), it.get("h")
+        for key, val in (("l", l), ("w", w), ("h", h)):
+            if val is None:
+                raise AppError(
+                    "E_VALIDATION",
+                    f"第 {len(saved) + 1} 条 {key.upper()} 缺失，无法写入主数据",
+                    status=422,
+                )
+            if not isinstance(val, (int, float)) or val <= 0:
+                raise AppError(
+                    "E_VALIDATION",
+                    f"第 {len(saved) + 1} 条 {key.upper()} 必须为正数",
+                    status=422,
+                )
+        rec = {k: it.get(k) for k in ("pn", "name", "l", "w", "h", "tare", "net", "gross")}
+        saved.append(pkg.upsert(rec))
+    rows = complete_rows(conn, ImportRowRepo(conn).list_by_task(tid))
+    ImportRowRepo(conn).replace_for_task(tid, rows)
+    return ok(preview_payload(rows))
+
+
 @router.post("/{tid}/import/re-match")
 def re_match(tid: int, conn=Depends(get_conn)):
     TaskRepo(conn).get(tid)

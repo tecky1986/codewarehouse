@@ -36,6 +36,99 @@ const freemixQtyLock = ref<Record<string, string>>({});
 const freemixMaxQty = ref<Record<string, string>>({});
 
 const missing = computed(() => preview.value?.missing || []);
+
+interface SuppKey {
+  pn: string;
+  packmatls: string;
+  row_no: number | null;
+  checked: boolean;
+  l: string;
+  w: string;
+  h: string;
+  tare: string;
+  net: string;
+  gross: string;
+}
+const suppKeys = ref<SuppKey[]>([]);
+const suppDone = ref(false);
+const suppError = ref("");
+
+function initSuppKeys() {
+  const um = preview.value?.unmatched || [];
+  const seen = new Set<string>();
+  const keys: SuppKey[] = [];
+  for (const u of um) {
+    const id = `${u.pn || ""}|${u.packmatls || ""}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    keys.push({
+      pn: u.pn || "",
+      packmatls: u.packmatls || "",
+      row_no: u.row_no,
+      checked: true,
+      l: "",
+      w: "",
+      h: "",
+      tare: "",
+      net: "",
+      gross: "",
+    });
+  }
+  suppKeys.value = keys;
+  suppDone.value = false;
+  suppError.value = "";
+}
+
+function selectedSuppKeys() {
+  return suppKeys.value.filter((k) => k.checked);
+}
+
+function validateSupp(k: SuppKey): string | null {
+  for (const f of ["l", "w", "h"] as const) {
+    const v = Number(k[f]);
+    if (!k[f] || Number.isNaN(v) || v <= 0) {
+      return `${f.toUpperCase()} 需为正数`;
+    }
+  }
+  return null;
+}
+
+async function writeSupplement() {
+  const sel = selectedSuppKeys();
+  if (!sel.length) {
+    suppError.value = "请至少勾选一个未匹配键。";
+    return;
+  }
+  for (const k of sel) {
+    const bad = validateSupp(k);
+    if (bad) {
+      suppError.value = `${k.pn || k.packmatls || "未命名"}：${bad}，请填写完整再提交。`;
+      return;
+    }
+  }
+  importing.value = true;
+  suppError.value = "";
+  const items = sel.map((k) => ({
+    pn: k.pn || undefined,
+    name: k.packmatls || undefined,
+    l: Number(k.l),
+    w: Number(k.w),
+    h: Number(k.h),
+    tare: k.tare ? Number(k.tare) : undefined,
+    net: k.net ? Number(k.net) : undefined,
+    gross: k.gross ? Number(k.gross) : undefined,
+  }));
+  try {
+    preview.value = await Tasks.supplement(tid.value, items);
+    initSuppKeys();
+    suppDone.value = true;
+    error.value = "";
+  } catch (e) {
+    suppError.value = (e as Error).message;
+  } finally {
+    importing.value = false;
+  }
+}
 const stepDone = computed(() => {
   const done: number[] = [];
   if ((preview.value?.row_count || 0) > 0 && hasMode.value) done.push(1);
@@ -67,6 +160,7 @@ const shownRows = computed(() => {
 
 async function load() {
   preview.value = await Tasks.preview(tid.value);
+  initSuppKeys();
   types.value = await ContainerTypes.list();
   const task = await Tasks.get(tid.value);
   let raw: Record<string, unknown> = {};
@@ -193,6 +287,7 @@ async function onPendingFile() {
   try {
     await Tasks.batchMaintain(tid.value, file);
     preview.value = await Tasks.reMatch(tid.value);
+    initSuppKeys();
   } catch (e) {
     error.value = (e as Error).message;
   } finally {
@@ -409,6 +504,48 @@ onMounted(load);
         </table>
       </div>
       <p v-else class="ok-text">所有规格已补全，可以开始计算。</p>
+
+      <div v-if="suppKeys.length" class="supp-block">
+        <h3 class="supp-title">未匹配主数据 · 一键补充</h3>
+        <p class="supp-hint">勾选需要补入主数据的键，填写规格（长/宽/高必填，cm 与 kg）后一键写入主数据并自动重新匹配，供以后任务复用。</p>
+        <div class="table-wrap">
+          <table class="supp-tbl">
+            <thead>
+              <tr>
+                <th>勾选</th>
+                <th>PN</th>
+                <th>PackMatls</th>
+                <th>长cm</th>
+                <th>宽cm</th>
+                <th>高cm</th>
+                <th>箱重kg</th>
+                <th>净重kg</th>
+                <th>毛重kg</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="k in suppKeys" :key="`${k.pn}|${k.packmatls}`">
+                <td><input type="checkbox" v-model="k.checked" /></td>
+                <td>{{ k.pn || "—" }}</td>
+                <td>{{ k.packmatls || "—" }}</td>
+                <td><input v-model="k.l" class="supp-input" placeholder="必填" /></td>
+                <td><input v-model="k.w" class="supp-input" placeholder="必填" /></td>
+                <td><input v-model="k.h" class="supp-input" placeholder="必填" /></td>
+                <td><input v-model="k.tare" class="supp-input" placeholder="—" /></td>
+                <td><input v-model="k.net" class="supp-input" placeholder="—" /></td>
+                <td><input v-model="k.gross" class="supp-input" placeholder="—" /></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="form-row" style="margin-top: 10px">
+          <button class="primary" @click="writeSupplement" :disabled="importing || selectedSuppKeys().length === 0">
+            一键写入主数据（{{ selectedSuppKeys().length }} 条）
+          </button>
+          <span v-if="suppDone" class="ok-text">已写入主数据并重新匹配</span>
+        </div>
+        <p v-if="suppError" class="error inline">{{ suppError }}</p>
+      </div>
     </section>
 
     <div class="next-bar">
@@ -497,6 +634,14 @@ a.link:hover { text-decoration: underline; }
 .tbl { width: 100%; border-collapse: collapse; min-width: 360px; }
 .tbl th { text-align: left; font-size: 13px; color: #888; font-weight: 500; padding: 8px 10px; border-bottom: 1px solid #e8e4e0; }
 .tbl td { padding: 8px 10px; font-size: 14px; color: #333; border-bottom: 1px solid #f0ede8; }
+
+.supp-block { margin-top: 16px; padding-top: 12px; border-top: 1px solid #f0ede8; }
+.supp-title { font-size: 14px; font-weight: 500; color: #2c2c2c; margin: 0 0 6px; }
+.supp-hint { font-size: 12px; color: #888; margin: 0 0 10px; line-height: 1.5; }
+.supp-tbl { width: 100%; border-collapse: collapse; min-width: 720px; }
+.supp-tbl th { text-align: left; font-size: 12px; color: #888; font-weight: 500; padding: 6px 8px; border-bottom: 1px solid #e8e4e0; }
+.supp-tbl td { padding: 6px 8px; font-size: 14px; color: #333; border-bottom: 1px solid #f0ede8; }
+.supp-input { width: 72px; padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
 
 @media (max-width: 900px) {
   .page { padding: 24px 24px 40px; }

@@ -77,6 +77,11 @@ export const Tasks = {
   },
   reMatch: (id: number) =>
     req<ImportPreview>(`/api/tasks/${id}/import/re-match`, { method: "POST" }),
+  supplement: (id: number, items: Array<Record<string, unknown>>) =>
+    req<ImportPreview>(`/api/tasks/${id}/import/supplement`, {
+      method: "POST",
+      body: JSON.stringify(items),
+    }),
   siteGroups: (id: number) => req<SiteGroup[]>(`/api/tasks/${id}/site-groups`),
   saveSiteGroups: (id: number, groups: SiteGroup[]) =>
     req<SiteGroup[]>(`/api/tasks/${id}/site-groups`, {
@@ -240,6 +245,7 @@ export interface ImportRow {
 export interface ImportPreview {
   rows: ImportRow[];
   missing: Array<{ pn: string | null; packmatls: string | null; row_no: number | null }>;
+  unmatched?: Array<{ pn: string | null; packmatls: string | null; row_no: number | null }>;
   can_compute: boolean;
   row_count: number;
   distinct_sites?: string[];

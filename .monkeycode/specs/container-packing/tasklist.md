@@ -26,7 +26,7 @@
 
 - [x] 4. 实现包装主数据 API
   - [x] 4.1 实现 GET/POST/PUT/DELETE `/api/packages`
-    - 字段含 PN、PackMatls、长宽高、三重量、旋转/易压/同种堆叠/装卸/堆码层数
+     - 字段含 PN、PackMatls、长宽高、三重量、四面进铲(rotatable)/同种堆叠/装卸/堆码层数/最大承压(max_load)
     - PN 已填则唯一；停用后新任务不可选
     - 对应：R22
   - [x] 4.2 为包装主数据编写单元测试
@@ -60,7 +60,7 @@
   - [x] 8.1 实现 model.py / geometry.py：CargoItem、AABB 相交、包围盒、支撑判定
     - 对应：design.md §5.2
   - [x] 8.2 实现 rules.py 全部校验器
-    - bounds、collision、payload、weight_order（R10）、crush（R11）、same_type_stack（R12）、fork_tine（R18）、manual_limit（R9）、pn_continuous（R8）、inside_out（R17）
+    - bounds、collision、payload、weight_order（R10）、crush/max_load=0（R11）、same_type_stack（R12）、fork_tine（R18）、manual_limit（R9）、pn_continuous（R8）、inside_out（R17）
     - 冲突优先级与降级记录（R14）
   - [x] 8.3 为规则校验器编写单元测试（必做）
     - 各校验器真值表；P1 不相交、P8 铲齿、P9 轻重
@@ -115,7 +115,7 @@
   - [x] 15.1 实现页面：任务列表/详情、导入预览、Site 确认、规则配置、箱型库、包装主数据、KPI 对照、导出模板、全局参数、JobProgress
     - 暖白背景、深灰文字、单强调色、四级标题、统一对齐、每区一个主按钮
     - 对应：R3、R14、R23、R31
-  - [x] 15.2 规则开关与优先级拖拽排序，默认顺序：Site 同柜 → PN 连续 → Site 分离 → 同种堆叠 → 易压 → 轻重 → 装卸
+   - [x] 15.2 规则开关与优先级拖拽排序，默认顺序：Site 同柜 → PN 连续 → Site 分离 → 同种堆叠 → 承压 → 轻重 → 装卸
     - 对应：R3、R14
   - [x] 15.3 箱型模式扩展 UI：ImportPreview 固定多箱型数量表 / 自由组合 勾选+qty_lock+max_qty；TaskList modeLabel 与 TaskDetail modeSummary 支持新结构
     - 对应：R19 AC1-AC8
@@ -124,6 +124,20 @@
   - [x] 16.1 启动脚本：探测空闲端口、拉起 FastAPI、打开默认浏览器、数据目录持久化 SQLite、关闭进程停止服务
     - 对应：R24
   - [x] 16.2 编写 PyInstaller 打包配置
-  - [x] 17. 检查点 - 确保所有测试通过
+   - [x] 17. 检查点 - 确保所有测试通过
     - 确保所有测试通过,如有疑问请询问用户
     - M5 验收：全链路回归（场景 1–17 可自动化部分）全绿
+
+- [ ] 18. 实现未匹配主数据一键补充与重新计算清空
+  - [ ] 18.1 后端 POST `/api/tasks/{tid}/import/supplement`：接收 `[{pn, name, l, w, h, tare, net, gross}]`，校验 l/w/h 为正数后批量 upsert 主数据，随即 re-match 并返回最新 preview
+    - 对应：R32 AC1–AC7
+  - [ ] 18.2 前端 API 扩展：`ImportPreview` 增加 `unmatched` 字段；`Tasks.supplement(tid, items)` 封装 JSON 提交
+    - 对应：R32
+  - [ ] 18.3 ImportPreview 补齐区块：渲染未匹配键勾选清单 + 可编辑规格行（PN/PackMatls/长宽高三重/三重量）+「一键写入主数据」按钮；填写完整才允许提交；成功后刷新预览
+    - 对应：R32 AC2–AC5
+  - [ ] 18.4 TaskDetail 计算按钮：plans 非空且无进行中 job 时显示「重新计算」，点击先调 `DELETE /api/tasks/{tid}/runs` 再触发计算；无方案时显示「开始计算」仅触发计算；计算中禁用按钮
+    - 对应：R33 AC1–AC5
+  - [ ] 18.5 运行全部前后端测试验证
+    - 后端 95+ 测试、前端 typecheck/build/test
+  - [ ] 18.6 检查点 - 确保所有测试通过
+    - 确保所有测试通过,如有疑问请询问用户

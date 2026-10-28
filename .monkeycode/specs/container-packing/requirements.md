@@ -20,7 +20,7 @@
 - **规则冲突优先级（Rule Conflict Priority）**: 当多条装箱规则对同一批货物给出互斥要求时，系统按用户勾选并排序的优先级决定遵守顺序。
 - **装卸方式（Loading Method）**: 货物装入集装箱的作业方式，取值为叉车装箱或人工装箱。
 - **人工装箱重量上限（Manual Loading Weight Limit）**: 允许采用人工装箱的单件重量上限，默认值为 30 kg。
-- **易压货物（Crush-Sensitive Cargo）**: 顶部禁止再堆放其他货物的货件；该货件可以堆在其他货件之上，或独占一层。
+- **承压货物（Max-Load Cargo）**: 最大承压（max_load）小于等于 0 的货件；该类货件顶部禁止再堆放其他货物。max_load 为 0 时不可被压，为 NULL 时不设承压上限。
 - **同种堆叠货物（Same-Type Stack Cargo）**: 仅允许与货物类型相同的货件发生上下堆叠关系的货件。
 - **导入模板（Import Template）**: 预先定义列结构的表格文件，用于批量导入货物、集装箱或其他输入数据。
 - **导出模板（Export Template）**: 用户自定义的 Excel 输出结构，包含表头字段、列顺序、列宽及格式。
@@ -163,16 +163,17 @@
 2. IF 某件货物无法找到满足轻重顺序的堆叠位置且无地面可用位置, THE System SHALL 将该货物标记为未分配，并给出原因为轻重堆叠约束不满足。
 3. THE System SHALL 将直接放置在箱底的货物视为满足本规则。
 
-### Requirement 11: 易压货物承压约束
+### Requirement 11: 承压约束
 
-**User Story:** AS 装箱计划人员, I want 标明不能被压的货物, so that 这类货物顶部不再堆放其他箱子。
+**User Story:** AS 装箱计划人员, I want 按最大承压限制顶部堆叠, so that 承压不足的货件不会被压坏。
 
 #### Acceptance Criteria
 
-1. WHEN 货物被标记为易压, THE System SHALL 禁止任何其他货物堆叠在该货物正上方。
-2. THE System SHALL 允许易压货物堆叠在其他非易压货物之上，前提是同时满足轻重堆叠规则。
-3. THE System SHALL 允许易压货物独占一层，即该层仅包含该货物或与其并排且互不上下堆叠的货物。
-4. IF 易压货物无法获得无上压的位置, THE System SHALL 将该货物标记为未分配，并给出原因为易压约束不满足。
+1. WHEN 货物的最大承压 max_load 等于 0, THE System SHALL 禁止任何其他货物堆叠在该货物正上方。
+2. WHEN 货物的最大承压 max_load 为 NULL（未设上限）, THE System SHALL 不对其顶部堆叠施加承压限制。
+3. THE System SHALL 允许 max_load 为 0 的货物堆叠在其他货物之上，前提是同时满足轻重堆叠规则。
+4. THE System SHALL 允许 max_load 为 0 的货物独占一层，即该层仅包含该货物或与其并排且互不上下堆叠的货物。
+5. IF 货物为直接堆叠支撑关系且支撑件 max_load 为 0, THE System SHALL 将该摆放视为承压约束不满足；若支撑件 max_load 不为 0 且被压重量未超 max_load，THE System SHALL 视为满足。
 
 ### Requirement 12: 同种堆叠约束
 
@@ -207,7 +208,7 @@
 2. THE System SHALL 将 Site 必须同柜约束的默认优先级置于最高，其后依次为 PN 连续装箱与 Site 必须分离。
 3. WHEN 用户勾选规则并调整顺序后保存, THE System SHALL 在下一次计算中按该顺序处理互斥约束。
 4. WHEN 两条已启用规则对同一批货物给出互斥要求, THE System SHALL 遵守优先级更高的规则，并在计算结果中记录被降级的规则名称。
-5. IF 用户未保存自定义优先级, THE System SHALL 使用默认顺序：Site 必须同柜、PN 连续装箱、Site 必须分离、同种堆叠、易压、轻重堆叠、装卸方式。
+5. IF 用户未保存自定义优先级, THE System SHALL 使用默认顺序：Site 必须同柜、PN 连续装箱、Site 必须分离、同种堆叠、承压、轻重堆叠、装卸方式。
 
 ### Requirement 15: 装箱结果 KPI
 
@@ -321,7 +322,7 @@
 #### Acceptance Criteria
 
 1. THE System SHALL 提供包装主数据维护界面，列出全部预定义包装，支持按包装代码、包装类型、货物类型、启用状态筛选。
-2. THE System SHALL 为每条包装主数据维护下列字段：PN、包装代码、名称（PackMatls）、包装类型、货物类型、长、宽、高、箱重、净重、毛重、体积、是否可水平旋转、是否易压、是否仅同种堆叠、默认装卸方式、最大堆码层数、启用状态、备注。
+2. THE System SHALL 为每条包装主数据维护下列字段：PN、包装代码、名称（PackMatls）、包装类型、货物类型、长、宽、高、箱重、净重、毛重、体积、是否四面进铲、是否仅同种堆叠、默认装卸方式、最大堆码层数（仅同种堆叠勾选时生效）、最大承压（0=不可被压，NULL=不设上限）、启用状态、备注。
 3. WHEN 用户新建或编辑包装主数据, THE System SHALL 要求 PN 在已填写时于主数据内唯一，要求名称在已填写时可用于查找，并要求长、宽、高、单件重量为正数。
 4. WHEN 用户将某包装主数据设为停用, THE System SHALL 使该包装不再出现在新任务的包装选择列表中，已引用该包装的既有任务仍可打开查看。
 5. THE System SHALL 允许用户在任务中从包装主数据选择包装并填写件数与 Site 后加入待装清单。
@@ -372,6 +373,7 @@
 4. WHEN 导入行缺少长、宽或高, THE System SHALL 先按 PN 查找包装主数据；PN 为空时再按 PackMatls 名称查找。
 5. WHEN 按 PN 或 PackMatls 命中已启用的包装主数据, THE System SHALL 用主数据补全该行空缺的长、宽、高、体积、箱重、净重、毛重，表内已有字段保持不变。
 6. IF 导入行缺少长、宽或高，且 PN 与 PackMatls 均无法命中已启用的包装主数据, THE System SHALL 在导入预览中标出该行，列出缺失的 PN 与 PackMatls，并阻止开始计算。
+6a. 所有导入行必须匹配到已启用的包装主数据方可开算；未匹配行在「补齐缺失规格」区块以勾选 + 可编辑规格呈现，可一键写入主数据并自动重新匹配（R32）。
 7. WHEN 存在缺失规格的行, THE System SHALL 提供批量维护：导出待填表（含 PN、PackMatls 及规格空列），允许用户填完后一次写入包装主数据，并支持在页面上逐条补全。
 8. WHEN 用户完成批量或逐条维护后选择重新匹配, THE System SHALL 再次按 PN 优先、PackMatls 次之补全空缺行。
 9. THE System SHALL 允许将有完整长宽高的导入行按 PackMatls 写入包装主数据，供后续按名称查找，例如 OUTCASE(IB-1)。
@@ -451,6 +453,32 @@
 3. WHEN 多个算法并行计算, THE System SHALL 分别显示每个算法的进度，并在每个算法完成后即时更新其 KPI 行。
 4. IF 某算法超时, THE System SHALL 明确显示超时标记与已用时，后续方案照常展示该算法的部分结果。
 5. WHEN 计算全部完成, THE System SHALL 展示总耗时与各算法耗时，并与 KPI 表中的计算耗时一致。
+
+### Requirement 32: 未匹配主数据一键补充与批量修改
+
+**User Story:** AS 装箱计划人员, I want 在导入预览页直接勾选未匹配到主数据的外箱规格并批量填写、一键写入主数据, so that 无需切换页面或下载上传 Excel 即可补齐主数据并供以后复用。
+
+#### Acceptance Criteria
+
+1. WHEN 导入预览中存在未匹配到包装主数据的行（`master_match` 为 false）, THE System SHALL 在「补齐缺失规格」区块列出全部去重后的未匹配键（PN + PackMatls + 首行行号），每行带一个勾选框，默认全部勾选。
+2. THE System SHALL 为每个被勾选的未匹配键提供可编辑字段：PN、PackMatls、长(cm)、宽(cm)、高(cm)、箱重(kg)、净重(kg)、毛重(kg)，长宽高为必填，其余可为空。
+3. WHEN 用户填写完至少一个未匹配键的长宽高并点击「一键写入主数据」, THE System SHALL 以 JSON 批量提交这些键的规格到主数据（存在同 PN 则更新、否则创建），成功后立即自动重新匹配导入行并刷新预览。
+4. WHEN 一键写入主数据成功, THE System SHALL 将已写入的键从未匹配清单移除，原未匹配行在新预览中变为已匹配且规格完整，`can_compute` 按最新匹配结果更新。
+5. IF 用户填写的长宽高任一为空或为非正数, THE System SHALL 阻止提交并逐字段标红提示，不发起写入请求。
+6. THE System SHALL 将一键写入的规格持久化到包装主数据，使其可被后续任务按 PN 或 PackMatls 复用。
+7. THE System SHALL 在勾选数大于 1 时允许用户修改已勾选键的规格值，所有被勾选键共享同一份可编辑表单（同键同值）或按行独立编辑；用户未填写完整规格时该键不参与本次写入。
+
+### Requirement 33: 重新计算按钮与清空当前结果
+
+**User Story:** AS 装箱计划人员, I want 已有计算结果时按钮显示「重新计算」并在点击后先清空旧结果再重算, so that 界面不会与历史结果混淆，每次重算都是干净起点。
+
+#### Acceptance Criteria
+
+1. WHEN 任务存在至少一条已完成的计算方案（plans 非空）且当前无进行中任务, THE System SHALL 将计算按钮文字显示为「重新计算」；任务无任何方案时显示「开始计算」。
+2. WHEN 用户点击「重新计算」, THE System SHALL 先调用清空当前任务全部 runs 的接口，再触发新一轮计算；计算进度、KPI 对照、3D 视图、采用态在清空后立即变为空，新一轮方案完成后重新填充。
+3. WHEN 用户点击「开始计算」（无历史方案）, THE System SHALL 仅触发新一轮计算，不执行清空。
+4. WHILE 计算进行中, THE System SHALL 禁用计算按钮，避免重复触发。
+5. THE System SHALL 在重新计算清空旧结果后保留导入数据、箱型模式、规则配置与 Site 分组不变。
 
 ## Open Items
 
