@@ -118,9 +118,10 @@ def _try_place_at_cap(
 ) -> Candidate | None:
     """Place item flush at back face `cap` (x = cap - dx); return cand or None."""
     load_seq = len(container.placed) + 1
+    z_max = container.max_z
     for (dx, dy, dz) in _orientations(item):
         x = cap - dx
-        if x < -1e-9 or dy > container.inner_w - y + 1e-9 or dz > container.inner_h - z + 1e-9:
+        if x < -1e-9 or dy > container.inner_w - y + 1e-9 or dz > z_max - z + 1e-9:
             continue
         cand = Candidate(
             item=item,
@@ -139,12 +140,13 @@ def _try_place_at_cap(
 
 
 def _expand_candidates(candidates: list, cand: Candidate, prev_cap: float) -> None:
+    z_max = cand.container.max_z
     for p in (
         (prev_cap, cand.y + cand.dy, cand.z),
-        (prev_cap, cand.y, cand.z + cand.dz),
+        (prev_cap, cand.y, cand.z + cand.dz) if cand.z + cand.dz <= z_max + 1e-9 else None,
         (cand.x, cand.y, cand.z),
     ):
-        if p not in candidates:
+        if p is not None and p not in candidates:
             candidates.append(p)
     candidates.sort(key=lambda p: (-p[0], p[2], p[1]))
 
@@ -316,7 +318,7 @@ def maximal_space(
     t_groups = site_together_groups(items, site_groups)
     sep_sites = site_separate_sites(items, site_groups)
     spaces: dict[int, list[_Space]] = {
-        id(c): [_Space(0.0, 0.0, 0.0, float(c.inner_l), float(c.inner_w), float(c.inner_h))]
+        id(c): [_Space(0.0, 0.0, 0.0, float(c.inner_l), float(c.inner_w), c.max_z)]
         for c in containers
     }
     unassigned: list[CargoItem] = []
@@ -370,9 +372,18 @@ def maximal_space(
 
 
 def assign_load_seq(containers: list) -> None:
-    """Rewrite load_seq: innermost wall, then floor-up, then along width."""
+    """Rewrite load_seq: lower z-levels first, then deepest back face,
+    then along width, then uid for determinism.
+
+    Sorting by (z, -(x+dx), y, uid) ensures:
+    - Lower z-levels are loaded first (supports before things on top).
+    - Within the same z-level, deeper items (larger back face x+dx)
+      are loaded before shallower ones, so the forklift can reach each
+      item without crossing already-placed boxes.
+    - uid breaks ties for stable ordering.
+    """
     for c in containers:
-        ordered = sorted(c.placed, key=lambda p: (-(p.x + p.dx), p.z, p.y, p.item.uid))
+        ordered = sorted(c.placed, key=lambda p: (p.z, -(p.x + p.dx), p.y, p.item.uid))
         for i, p in enumerate(ordered, start=1):
             p.load_seq = i
         c.placed[:] = ordered

@@ -254,7 +254,6 @@ class PackageMasterRepo:
             "gross",
             "volume",
             "rotatable",
-            "crush_sensitive",
             "same_type_stack",
             "default_loading",
             "max_stack",
@@ -267,6 +266,8 @@ class PackageMasterRepo:
             values[cols.index("enabled")] = 1
         if values[cols.index("rotatable")] is None:
             values[cols.index("rotatable")] = 1
+        if values[cols.index("max_load")] is None:
+            values[cols.index("max_load")] = 0.0
         cur = self.conn.execute(
             f"INSERT INTO package_master ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
             values,
@@ -294,7 +295,6 @@ class PackageMasterRepo:
             "gross",
             "volume",
             "rotatable",
-            "crush_sensitive",
             "same_type_stack",
             "default_loading",
             "max_stack",
@@ -303,6 +303,8 @@ class PackageMasterRepo:
             "remark",
         ]
         merged = {k: data[k] if k in data else existing[k] for k in fields}
+        if "max_load" not in data and merged.get("max_load") is None:
+            merged["max_load"] = 0.0
         self.conn.execute(
             f"UPDATE package_master SET {', '.join(k + '=?' for k in fields)} WHERE id=?",
             [merged[k] for k in fields] + [pid],

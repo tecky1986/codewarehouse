@@ -358,7 +358,6 @@ export interface PackageMaster {
   net?: number | null;
   gross?: number | null;
   rotatable?: number;
-  crush_sensitive?: number;
   same_type_stack?: number;
   default_loading?: string | null;
   max_stack?: number | null;

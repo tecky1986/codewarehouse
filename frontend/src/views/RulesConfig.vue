@@ -27,8 +27,7 @@ const ALL_RULES = [
   { key: "pn_continuous", label: "PN 连续", desc: "同一 PN 的货物尽量连续放置，避免分散在不同箱内" },
   { key: "site_separate", label: "Site 分离", desc: "勾选后，标记为「分离」的 Site 货物尽量装入不同集装箱" },
   { key: "same_type_stack", label: "同种堆叠", desc: "允许相同型号的货物上下堆叠" },
-  { key: "max_stack_layers", label: "堆码层数", desc: "限制堆叠层数，取货物 max_stack；被压箱的每箱承重量（max_load）超限也违规" },
-  { key: "crush", label: "易压", desc: "易压货物（crush_sensitive）不能压在其它货物上方" },
+  { key: "max_stack_layers", label: "堆码层数", desc: "限制堆叠层数，取货物 max_stack（仅同种堆叠勾选时生效）；被压箱的每箱承重量（max_load）超限也违规" },
   { key: "weight_order", label: "轻重", desc: "重物在下、轻物在上，减少压损" },
   { key: "fork_tine", label: "装卸", desc: "考虑叉车装卸顺序，便于从门口依次取出" },
 ];

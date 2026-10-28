@@ -20,11 +20,11 @@ from packing_engine.verify import verify_container, verify_plan, ERROR_CODES
 
 
 def _item(uid, l, w, h, gross, pn=None, rotatable=True, max_stack=None, max_load=None,
-         cargo="A", crush=False, same_stack=False):
+         cargo="A", same_stack=False):
     return CargoItem(
         uid=uid, pn=pn, packmatls=None, cargo_type=cargo,
         l=l, w=w, h=h, tare=0.0, net=gross, gross=gross,
-        rotatable=rotatable, crush_sensitive=crush, same_type_stack=same_stack,
+        rotatable=rotatable, same_type_stack=same_stack,
         max_stack=max_stack, max_load=max_load,
     )
 
@@ -93,11 +93,11 @@ def test_e102_new_row_before_previous_complete_illegal():
     box = _box(L=4000, W=2000, H=2000)
     a = _item("a", 1000, 1000, 1000, 100)
     b = _item("b", 1000, 1000, 1000, 50)
-    # row 1 (z=0, y=0 band) not complete: a at x=3000, front face = 3000 > 0
-    # then b opens a new y-band at z=0
+    # a opens y-band at y=1000 (z=0), then b opens a LOWER y-band at
+    # y=0 on the same z-level -> y-order violation -> E102.
     box.placed = [
-        _cand(box, a, x=3000, y=0, z=0, dx=1000, dy=1000, dz=1000, seq=1),
-        _cand(box, b, x=3000, y=1000, z=0, dx=1000, dy=1000, dz=1000, seq=2),
+        _cand(box, a, x=3000, y=1000, z=0, dx=1000, dy=1000, dz=1000, seq=1),
+        _cand(box, b, x=3000, y=0, z=0, dx=1000, dy=1000, dz=1000, seq=2),
     ]
     rep = verify_container(box)
     codes = {c for c, _ in rep.errors}
@@ -108,7 +108,7 @@ def test_e102_row_complete_before_new_band_legal():
     box = _box(L=4000, W=2000, H=2000)
     a = _item("a", 1000, 1000, 1000, 100)
     b = _item("b", 1000, 1000, 1000, 50)
-    # first row fully filled to door (x=0), then second band opens
+    # y-bands opened in increasing order: y=0 then y=1000, both filled to door
     box.placed = [
         _cand(box, a, x=0, y=0, z=0, dx=1000, dy=1000, dz=1000, seq=1),
         _cand(box, b, x=0, y=1000, z=0, dx=1000, dy=1000, dz=1000, seq=2),
@@ -190,12 +190,12 @@ def test_e106_forks_blocked_during_unload_illegal():
     box = _box(L=4000, W=2000, H=2000)
     c = _item("c", 1000, 1000, 1000, 10)
     a = _item("a", 1000, 1000, 1000, 100)
-    # c (seq=1) at x=500..1500, a (seq=2) at x=1000..2000, same y-band and
-    # z-level, x-overlap [1000,1500).  Reverse unload removes a first; c
-    # remains and its top face (z=1000) rises above a's working height, so
-    # the forks cannot withdraw -> E106.
+    # c (seq=1) at x=0..1000, a (seq=2) at x=1000..2000, same y-band and
+    # z-level.  Reverse unload removes a first; the forklift at x=1000
+    # must drive back to the door, but c (x=0..1000, top z=1000) blocks
+    # the retreat path -> E106.
     box.placed = [
-        _cand(box, c, x=500, y=0, z=0, dx=1000, dy=1000, dz=1000, seq=1),
+        _cand(box, c, x=0, y=0, z=0, dx=1000, dy=1000, dz=1000, seq=1),
         _cand(box, a, x=1000, y=0, z=0, dx=1000, dy=1000, dz=1000, seq=2),
     ]
     rep = verify_container(box)
@@ -448,11 +448,9 @@ def _run_algo(algo, label_suffix=""):
 def test_e2e_dblf_plan_verifies():
     plan = _run_algo("dblf", "-dblf")
     report = verify_plan(plan)
-    # dblf can open a second y-band before the first row reaches the door
-    # (a known row-discipline gap); the placement is collision-free and the
-    # reverse unload succeeds.  Record the expected E102 in the report.
+    # dblf now opens y-bands in increasing order, so the plan verifies clean.
+    assert report.ok, f"dblf plan should verify clean, got {report.error_codes}"
     assert report.containers[0].unload_ok, "dblf reverse unload must succeed"
-    assert "E102" in report.error_codes, f"dblf row-discipline gap should surface as E102, got {report.error_codes}"
 
 
 def test_e2e_wall_build_plan_verifies():

@@ -36,7 +36,6 @@ CREATE TABLE IF NOT EXISTS package_master (
     gross REAL,
     volume REAL,
     rotatable INTEGER DEFAULT 1,
-    crush_sensitive INTEGER DEFAULT 0,
     same_type_stack INTEGER DEFAULT 0,
     default_loading TEXT,
     max_stack INTEGER,

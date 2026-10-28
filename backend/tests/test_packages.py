@@ -28,7 +28,6 @@ def test_package_crud_and_pn_unique(client):
             "net": 200,
             "gross": 240,
             "rotatable": 1,
-            "crush_sensitive": 0,
             "same_type_stack": 0,
             "default_loading": "forklift",
         },

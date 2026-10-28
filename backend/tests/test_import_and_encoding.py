@@ -72,6 +72,20 @@ def test_ven_filled_by_pn(client):
             "enabled": 1,
         },
     )
+    client.post(
+        "/api/packages",
+        json={
+            "name": "OUTCASE(IB-1)",
+            "package_type": "OUTCASE(IB-1)",
+            "l": 1460,
+            "w": 1150,
+            "h": 1100,
+            "tare": 5,
+            "net": 50,
+            "gross": 392,
+            "enabled": 1,
+        },
+    )
     tid = _create_task(client)
     body = client.post(
         f"/api/tasks/{tid}/import",
@@ -257,6 +271,7 @@ def test_batch_maintain_and_rematch(client):
     ws = wb.active
     ws.append(["PN", "PackMatls", "长cm", "宽cm", "高cm", "箱重kg", "净重kg", "毛重kg"])
     ws.append(["ACW1081490*80", "OUTCASE(VEN)", 120, 80, 90, 10, 20, 30])
+    ws.append([None, "OUTCASE(IB-1)", 146, 115, 110, 5, 50, 392])
     buf = BytesIO()
     wb.save(buf)
     saved = client.post(

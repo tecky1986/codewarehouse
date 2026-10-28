@@ -156,10 +156,17 @@ class JobsService:
         task = TaskRepo(self.conn).get(tid)
         rows = complete_rows(self.conn, ImportRowRepo(self.conn).list_by_task(tid))
         incomplete = [r for r in rows if not r.get("complete")]
+        unmatched = [r for r in rows if not r.get("master_match", True)]
         if incomplete:
             raise AppError(
                 "E_IMPORT_INCOMPLETE",
                 f"{len(incomplete)} 行缺规格，无法开算",
+                status=422,
+            )
+        if unmatched:
+            raise AppError(
+                "E_NO_MASTER_MATCH",
+                f"{len(unmatched)} 行未匹配到包装主数据，无法开算",
                 status=422,
             )
 
@@ -296,8 +303,16 @@ class JobsService:
             t0 = time.monotonic()
             try:
                 if locks is not None:
+                    placement_fn = None if name == "freemix" else ALGORITHMS.get(name)
                     plan = normalize.freemix(
-                        local_items, containers, settings, enabled_rules, site_groups, rep, locks=locks
+                        local_items,
+                        containers,
+                        settings,
+                        enabled_rules,
+                        site_groups,
+                        rep,
+                        locks=locks,
+                        placement_fn=placement_fn,
                     )
                 else:
                     plan = fn(local_items, containers, settings, enabled_rules, site_groups, rep)

@@ -209,6 +209,27 @@ def _fork_blocker(p: Candidate, placed: list[Candidate]) -> Optional[Candidate]:
     return None
 
 
+def _withdraw_blocker(p: Candidate, placed: list[Candidate]) -> Optional[Candidate]:
+    """Box blocking the forklift as it retreats with p toward the door.
+
+    During unloading the forklift picks up p at x=p.x and drives back
+    to the door (x = 0) carrying p.  A placed box q blocks the retreat
+    when q starts before p's front face (q.x < p.x + EPS), q's y-band
+    overlaps p's, and q's top rises above p's bottom (q.z + q.dz >
+    p.z + EPS) so the forks cannot slide under q.
+    """
+    for q in placed:
+        if q is p:
+            continue
+        if q.x >= p.x + EPS:
+            continue
+        if not _y_overlap(q.y, q.dy, p.y, p.dy):
+            continue
+        if q.z + q.dz > p.z + EPS:
+            return q
+    return None
+
+
 def _row_front_face(placed: list[Candidate], z_level: float, y: float, dy: float) -> float:
     """Deepest front face (min x) of any box in the same y-band at z_level.
 
@@ -245,22 +266,20 @@ def _verify_container_forward(c: ContainerInstance) -> ContainerReport:
         zl = _z_level(p)
 
         # --- E102: row discipline ----------------------------------------
-        # A row is (z-level, y-band).  Within one z-level, y-bands must be
-        # opened in increasing y order, and each band must be filled to the
-        # door (front face x = 0) before the next band opens.  Moving to a
-        # higher z-level (stacking) does not count as opening a new row.
+        # Within one z-level, y-bands must be opened in increasing y order.
+        # A new band with a lower y-start than any previously-opened band at
+        # the same z-level would force the forklift to re-enter an earlier
+        # strip, which is not possible once the row has advanced.
         bands = open_rows.get(zl, [])
         new_band = not any(
             _y_overlap(by, bdy, p.y, p.dy) for by, bdy in bands
         )
         if new_band:
-            for by, bdy in bands:
-                front = _row_front_face(placed, zl, by, bdy)
-                if front > EPS:
-                    step.add("E102", f"当前排（z={zl*100}, y={by:.0f}）尚未完成")
-                    break
+            prev_min_y = min((by for by, _ in bands), default=0.0)
+            if p.y < prev_min_y - EPS and bands:
+                step.add("E102", f"当前排（z={zl*100}）y 顺序违规（y={p.y:.0f}）")
             bands.append((p.y, p.dy))
-            open_rows[zl] = bands
+        open_rows[zl] = bands
 
         # --- E103 / E110: supports and load capacity -------------------
         if p.z > EPS:
@@ -273,6 +292,11 @@ def _verify_container_forward(c: ContainerInstance) -> ContainerReport:
                     if cap is None:
                         continue
                     load = sum(q.item.gross for q in _box_above(b, placed)) + p.item.gross
+                    if cap == 0:
+                        if p.item.gross > EPS:
+                            step.add("E110", "被压货物不可承压（max_load=0）")
+                            break
+                        continue
                     if load > cap + EPS:
                         step.add("E110", f"超过下层承重 {cap:.0f} kg")
                         break
@@ -355,7 +379,7 @@ def _verify_container_unload(c: ContainerInstance) -> ContainerReport:
 
         # the forks must be able to withdraw: nothing in front of p in the
         # same y-band rising above the forks' working height
-        blocker = _fork_blocker(p, rest)
+        blocker = _withdraw_blocker(p, rest)
         if blocker is not None:
             step.add("E106", f"货叉无法退出，被 {blocker.item.uid} 阻挡")
 

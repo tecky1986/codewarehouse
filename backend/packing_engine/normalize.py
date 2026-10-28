@@ -50,6 +50,7 @@ def freemix(
     site_groups,
     reporter,
     locks: dict | None = None,
+    placement_fn: "Callable | None" = None,
 ) -> Plan:
     """Freemix algorithm entry registered as a solver.
 
@@ -57,13 +58,24 @@ def freemix(
     `locks` (type_lock / qty_lock / max_qty) bound the search (R19 AC4-6/12).
     An infeasible combination (R19 AC10) or a best plan with unassigned
     items yields an empty plan: everything unassigned, reason E_NO_FEASIBLE.
+
+    When *placement_fn* is given it is used for the per-combo placement
+    step instead of the default `dblf`, so the combo search can be paired
+    with any registered algorithm.
     """
     # dedupe catalog prototypes by type_code
     catalog: dict[str, ContainerInstance] = {}
     for c in containers:
         catalog.setdefault(c.type_code, c)
     plan, error, timed_out = _freemix_search(
-        items, catalog, locks or {}, settings, enabled_rules, site_groups, reporter
+        items,
+        catalog,
+        locks or {},
+        settings,
+        enabled_rules,
+        site_groups,
+        reporter,
+        placement_fn=placement_fn,
     )
     if plan is not None:
         return plan
@@ -137,11 +149,10 @@ def items_from_rows(rows: list[dict], packages: list[dict] | None = None, manual
             gross=_d("j_gross"),
             volume=(float(r["e_cbm"]) if r.get("e_cbm") is not None else None),
             rotatable=bool((master or {}).get("rotatable", 1)),
-            crush_sensitive=bool((master or {}).get("crush_sensitive", 0)),
             same_type_stack=bool((master or {}).get("same_type_stack", 0)),
             loading=str((master or {}).get("default_loading") or "manual"),
-            max_stack=(master or {}).get("max_stack"),
-            max_load=(master or {}).get("max_load"),
+            max_stack=(master or {}).get("max_stack") if (master or {}).get("same_type_stack") else None,
+            max_load=(float((master or {}).get("max_load")) if (master or {}).get("max_load") is not None else None),
             site=r.get("m_site"),
             outcase=r.get("f_outcase"),
             source_flag=r.get("source_flag") or "table",
