@@ -44,7 +44,7 @@ async def validation_handler(_request: Request, exc: RequestValidationError):
 
 @app.exception_handler(Exception)
 async def unhandled_handler(_request: Request, exc: Exception):
-    return fail("E_ENGINE", str(exc), status=500)
+    return fail("E_ENGINE", "服务器内部错误", status=500)
 
 
 class SPAStaticFiles(StaticFiles):

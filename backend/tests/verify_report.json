@@ -1,0 +1,419 @@
+[
+  {
+    "algorithm": "dblf",
+    "ok": false,
+    "error_codes": {
+      "E102": 1
+    },
+    "containers": [
+      {
+        "label": "40GP-1",
+        "ok": false,
+        "unload_ok": true,
+        "errors": {
+          "E102": 1
+        },
+        "steps": [
+          {
+            "seq": 1,
+            "uid": "a",
+            "ok": true,
+            "errors": []
+          },
+          {
+            "seq": 2,
+            "uid": "t",
+            "ok": false,
+            "errors": [
+              [
+                "E102",
+                "当前排（z=0, y=0）尚未完成"
+              ]
+            ]
+          },
+          {
+            "seq": 3,
+            "uid": "b",
+            "ok": true,
+            "errors": []
+          }
+        ],
+        "frames": [
+          [
+            "a"
+          ],
+          [
+            "a",
+            "t"
+          ],
+          [
+            "a",
+            "t",
+            "b"
+          ]
+        ],
+        "unload_steps": [
+          {
+            "seq": 3,
+            "uid": "b",
+            "ok": true,
+            "errors": []
+          },
+          {
+            "seq": 2,
+            "uid": "t",
+            "ok": true,
+            "errors": []
+          },
+          {
+            "seq": 1,
+            "uid": "a",
+            "ok": true,
+            "errors": []
+          }
+        ],
+        "unload_frames": [
+          [
+            "a",
+            "t"
+          ],
+          [
+            "a"
+          ],
+          []
+        ]
+      }
+    ],
+    "planned_unassigned": []
+  },
+  {
+    "algorithm": "maxspace",
+    "ok": false,
+    "error_codes": {
+      "E102": 1
+    },
+    "containers": [
+      {
+        "label": "40GP-1",
+        "ok": false,
+        "unload_ok": true,
+        "errors": {
+          "E102": 1
+        },
+        "steps": [
+          {
+            "seq": 1,
+            "uid": "a",
+            "ok": true,
+            "errors": []
+          },
+          {
+            "seq": 2,
+            "uid": "t",
+            "ok": false,
+            "errors": [
+              [
+                "E102",
+                "当前排（z=0, y=0）尚未完成"
+              ]
+            ]
+          },
+          {
+            "seq": 3,
+            "uid": "b",
+            "ok": true,
+            "errors": []
+          }
+        ],
+        "frames": [
+          [
+            "a"
+          ],
+          [
+            "a",
+            "t"
+          ],
+          [
+            "a",
+            "t",
+            "b"
+          ]
+        ],
+        "unload_steps": [
+          {
+            "seq": 3,
+            "uid": "b",
+            "ok": true,
+            "errors": []
+          },
+          {
+            "seq": 2,
+            "uid": "t",
+            "ok": true,
+            "errors": []
+          },
+          {
+            "seq": 1,
+            "uid": "a",
+            "ok": true,
+            "errors": []
+          }
+        ],
+        "unload_frames": [
+          [
+            "a",
+            "t"
+          ],
+          [
+            "a"
+          ],
+          []
+        ]
+      }
+    ],
+    "planned_unassigned": []
+  },
+  {
+    "algorithm": "extreme_point",
+    "ok": false,
+    "error_codes": {
+      "E102": 1
+    },
+    "containers": [
+      {
+        "label": "40GP-1",
+        "ok": false,
+        "unload_ok": true,
+        "errors": {
+          "E102": 1
+        },
+        "steps": [
+          {
+            "seq": 1,
+            "uid": "a",
+            "ok": true,
+            "errors": []
+          },
+          {
+            "seq": 2,
+            "uid": "t",
+            "ok": false,
+            "errors": [
+              [
+                "E102",
+                "当前排（z=0, y=0）尚未完成"
+              ]
+            ]
+          },
+          {
+            "seq": 3,
+            "uid": "b",
+            "ok": true,
+            "errors": []
+          }
+        ],
+        "frames": [
+          [
+            "a"
+          ],
+          [
+            "a",
+            "t"
+          ],
+          [
+            "a",
+            "t",
+            "b"
+          ]
+        ],
+        "unload_steps": [
+          {
+            "seq": 3,
+            "uid": "b",
+            "ok": true,
+            "errors": []
+          },
+          {
+            "seq": 2,
+            "uid": "t",
+            "ok": true,
+            "errors": []
+          },
+          {
+            "seq": 1,
+            "uid": "a",
+            "ok": true,
+            "errors": []
+          }
+        ],
+        "unload_frames": [
+          [
+            "a",
+            "t"
+          ],
+          [
+            "a"
+          ],
+          []
+        ]
+      }
+    ],
+    "planned_unassigned": []
+  },
+  {
+    "algorithm": "wall_build",
+    "ok": true,
+    "error_codes": {},
+    "containers": [
+      {
+        "label": "40GP-1",
+        "ok": true,
+        "unload_ok": true,
+        "errors": {},
+        "steps": [
+          {
+            "seq": 1,
+            "uid": "a",
+            "ok": true,
+            "errors": []
+          },
+          {
+            "seq": 2,
+            "uid": "b",
+            "ok": true,
+            "errors": []
+          },
+          {
+            "seq": 3,
+            "uid": "t",
+            "ok": true,
+            "errors": []
+          }
+        ],
+        "frames": [
+          [
+            "a"
+          ],
+          [
+            "a",
+            "b"
+          ],
+          [
+            "a",
+            "b",
+            "t"
+          ]
+        ],
+        "unload_steps": [
+          {
+            "seq": 3,
+            "uid": "t",
+            "ok": true,
+            "errors": []
+          },
+          {
+            "seq": 2,
+            "uid": "b",
+            "ok": true,
+            "errors": []
+          },
+          {
+            "seq": 1,
+            "uid": "a",
+            "ok": true,
+            "errors": []
+          }
+        ],
+        "unload_frames": [
+          [
+            "a",
+            "b"
+          ],
+          [
+            "a"
+          ],
+          []
+        ]
+      }
+    ],
+    "planned_unassigned": []
+  },
+  {
+    "algorithm": "guillotine",
+    "ok": true,
+    "error_codes": {},
+    "containers": [
+      {
+        "label": "40GP-1",
+        "ok": true,
+        "unload_ok": true,
+        "errors": {},
+        "steps": [
+          {
+            "seq": 1,
+            "uid": "a",
+            "ok": true,
+            "errors": []
+          },
+          {
+            "seq": 2,
+            "uid": "b",
+            "ok": true,
+            "errors": []
+          },
+          {
+            "seq": 3,
+            "uid": "t",
+            "ok": true,
+            "errors": []
+          }
+        ],
+        "frames": [
+          [
+            "a"
+          ],
+          [
+            "a",
+            "b"
+          ],
+          [
+            "a",
+            "b",
+            "t"
+          ]
+        ],
+        "unload_steps": [
+          {
+            "seq": 3,
+            "uid": "t",
+            "ok": true,
+            "errors": []
+          },
+          {
+            "seq": 2,
+            "uid": "b",
+            "ok": true,
+            "errors": []
+          },
+          {
+            "seq": 1,
+            "uid": "a",
+            "ok": true,
+            "errors": []
+          }
+        ],
+        "unload_frames": [
+          [
+            "a",
+            "b"
+          ],
+          [
+            "a"
+          ],
+          []
+        ]
+      }
+    ],
+    "planned_unassigned": []
+  }
+]

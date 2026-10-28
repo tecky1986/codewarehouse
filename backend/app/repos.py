@@ -95,7 +95,6 @@ class ContainerTypeRepo:
             "volume",
             "freight_price",
             "enabled",
-            "max_stack_layers",
             "remark",
         )
         values = [data.get(c) for c in cols]
@@ -134,7 +133,6 @@ class ContainerTypeRepo:
             "volume",
             "freight_price",
             "enabled",
-            "max_stack_layers",
             "remark",
         ]
         merged = {k: data[k] if k in data else existing[k] for k in fields}
@@ -144,7 +142,7 @@ class ContainerTypeRepo:
             """UPDATE container_type SET
                code=?, name=?, iso_code=?, inner_l=?, inner_w=?, inner_h=?,
                door_w=?, door_h=?, max_payload=?, tare_weight=?, volume=?,
-               freight_price=?, enabled=?, max_stack_layers=?, remark=? WHERE id=?""",
+               freight_price=?, enabled=?, remark=? WHERE id=?""",
             [merged[k] for k in fields] + [cid],
         )
         self.conn.commit()
@@ -260,6 +258,7 @@ class PackageMasterRepo:
             "same_type_stack",
             "default_loading",
             "max_stack",
+            "max_load",
             "enabled",
             "remark",
         )
@@ -299,6 +298,7 @@ class PackageMasterRepo:
             "same_type_stack",
             "default_loading",
             "max_stack",
+            "max_load",
             "enabled",
             "remark",
         ]

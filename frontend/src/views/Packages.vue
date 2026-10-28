@@ -26,6 +26,7 @@ const emptyForm = () => ({
   same_type_stack: 0,
   default_loading: "人工",
   max_stack: 0,
+  max_load: null as number | null,
   enabled: 1,
 });
 
@@ -64,6 +65,7 @@ function startEdit(p: PackageMaster) {
     same_type_stack: p.same_type_stack ?? 0,
     default_loading: p.default_loading || "人工",
     max_stack: p.max_stack ?? 0,
+    max_load: p.max_load ?? null,
     enabled: p.enabled ?? 1,
   };
   showForm.value = true;
@@ -173,6 +175,7 @@ onMounted(load);
           </select>
         </label>
         <label>最大堆码层数 <input type="number" v-model.number="form.max_stack" /></label>
+        <label>每箱承重量kg <input type="number" step="0.1" v-model.number="form.max_load" placeholder="留空=不限" /></label>
         <label class="ck">启用 <input type="checkbox" v-model="form.enabled" :true-value="1" :false-value="0" /></label>
       </div>
       <div class="form-actions">

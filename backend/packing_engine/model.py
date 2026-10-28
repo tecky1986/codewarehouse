@@ -20,6 +20,7 @@ class CargoItem:
     same_type_stack: bool = False
     loading: str = "manual"  # manual | forklift (effective after normalize)
     max_stack: Optional[int] = None
+    max_load: Optional[float] = None  # per-box top face load capacity (kg); None = unlimited
     site: Optional[str] = None
     outcase: Optional[str] = None
     row_no: Optional[int] = None
@@ -47,7 +48,8 @@ class ContainerInstance:
     volume_m3: float
     placed: list = field(default_factory=list)
     freight_price: float = 0.0
-    max_stack_layers: Optional[int] = None
+    door_w: Optional[int] = None
+    door_h: Optional[int] = None
 
     @property
     def used_volume(self) -> float:
@@ -78,6 +80,7 @@ class Candidate:
     dz: float
     load_seq: int = 0
     degraded_rules: list = field(default_factory=list)
+    verify_errors: list = field(default_factory=list)
 
 
 @dataclass

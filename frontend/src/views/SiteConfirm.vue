@@ -13,6 +13,14 @@ const showGuide = ref(true);
 const saving = ref(false);
 const saved = ref(false);
 const error = ref("");
+const expanded = ref<Set<number>>(new Set());
+
+function toggleExpand(idx: number) {
+  const s = new Set(expanded.value);
+  if (s.has(idx)) s.delete(idx);
+  else s.add(idx);
+  expanded.value = s;
+}
 
 const conflict = computed(() => groups.value.some((g) => g.together && g.separate));
 const stepDoneComputed = computed(
@@ -90,55 +98,65 @@ onMounted(load);
     <p v-if="saved" class="ok">已保存</p>
     <p v-if="stepDoneComputed" class="ok">当前数据只有 1 个 Site（或未填 Site），本步骤已自动完成，可直接进入规则配置。</p>
 
-    <div v-if="groups.length === 0" class="empty">暂无 Site 数据（请先导入）</div>
+      <div v-if="groups.length === 0" class="empty">暂无 Site 数据（请先导入）</div>
 
     <div v-for="(g, idx) in groups" :key="idx" class="card">
-      <div class="card-head">
-        <span class="site-name">{{ g.site || "（未填 Site）" }}</span>
-        <span class="count">{{ g.items.length }} 件</span>
+      <div class="card-head" @click="toggleExpand(idx)">
+        <div class="card-head-left">
+          <span class="chevron" :class="{ open: expanded.has(idx) }">▶</span>
+          <span class="site-name">{{ g.site || "（未填 Site）" }}</span>
+          <span class="count">{{ g.items.length }} 件</span>
+        </div>
+        <div class="card-head-right">
+          <span v-if="g.together" class="tag tag-together">同柜</span>
+          <span v-else-if="g.separate" class="tag tag-separate">分离</span>
+          <span v-else class="tag tag-none">未设</span>
+        </div>
       </div>
 
-      <div class="opts">
-        <label>
-          <input
-            type="checkbox"
-            :checked="g.together"
-            @change="(e) => toggleTogether(g, (e.target as HTMLInputElement).checked)"
-          />
-          同柜
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            :checked="g.separate"
-            @change="(e) => toggleSeparate(g, (e.target as HTMLInputElement).checked)"
-          />
-          分离
-        </label>
-      </div>
+      <template v-if="expanded.has(idx)">
+        <div class="opts">
+          <label>
+            <input
+              type="checkbox"
+              :checked="g.together"
+              @change="(e) => toggleTogether(g, (e.target as HTMLInputElement).checked)"
+            />
+            同柜
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              :checked="g.separate"
+              @change="(e) => toggleSeparate(g, (e.target as HTMLInputElement).checked)"
+            />
+            分离
+          </label>
+        </div>
 
-      <div class="table-wrap">
-        <table class="mini">
-          <thead>
-            <tr>
-              <th>行</th>
-              <th>OUTCASE</th>
-              <th>PackMatls</th>
-              <th>体积m³</th>
-              <th>毛重kg</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="it in g.items" :key="it.row_no">
-              <td>{{ it.row_no }}</td>
-              <td>{{ it.outcase }}</td>
-              <td>{{ it.packmatls }}</td>
-              <td>{{ it.volume ? it.volume.toFixed(3) : "—" }}</td>
-              <td>{{ it.gross ?? "—" }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+        <div class="table-wrap">
+          <table class="mini">
+            <thead>
+              <tr>
+                <th>行</th>
+                <th>OUTCASE</th>
+                <th>PackMatls</th>
+                <th>体积m³</th>
+                <th>毛重kg</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="it in g.items" :key="it.row_no">
+                <td>{{ it.row_no }}</td>
+                <td>{{ it.outcase }}</td>
+                <td>{{ it.packmatls }}</td>
+                <td>{{ it.volume ? it.volume.toFixed(3) : "—" }}</td>
+                <td>{{ it.gross ?? "—" }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
     </div>
 
     <div class="next-bar">
@@ -172,10 +190,18 @@ a.ghost { color: #888; text-decoration: none; font-size: 14px; }
 .empty { color: #999; padding: 24px 0; text-align: center; font-size: 14px; }
 .error { color: #c62828; font-size: 13px; margin: 0 0 8px; }
 .ok { color: #1a5c38; font-size: 13px; margin: 0 0 8px; }
-.card { border: 1px solid #e8e4e0; border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; background: #fff; }
-.card-head { display: flex; justify-content: space-between; margin-bottom: 10px; }
+.card { border: 1px solid #e8e4e0; border-radius: 8px; padding: 14px 20px; margin-bottom: 12px; background: #fff; }
+.card-head { display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+.card-head-left { display: flex; align-items: center; gap: 8px; }
+.card-head-right { display: flex; align-items: center; gap: 6px; }
+.chevron { font-size: 10px; color: #999; transition: transform 0.15s; }
+.chevron.open { transform: rotate(90deg); }
 .site-name { font-weight: 600; font-size: 15px; color: #2c2c2c; }
 .count { font-size: 13px; color: #888; }
+.tag { font-size: 11px; padding: 1px 8px; border-radius: 3px; }
+.tag-together { background: #e8f5e9; color: #1a5c38; }
+.tag-separate { background: #fff8e1; color: #8a6d1b; }
+.tag-none { background: #f0ede8; color: #999; }
 .opts { display: flex; gap: 20px; margin-bottom: 12px; }
 .opts label { display: flex; align-items: center; gap: 6px; font-size: 14px; color: #333; cursor: pointer; }
 .mini { width: 100%; border-collapse: collapse; min-width: 520px; }

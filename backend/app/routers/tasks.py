@@ -31,7 +31,7 @@ def list_tasks(repo: TaskRepo = Depends(_task_repo)):
 
 @router.get("/sample.xlsx")
 def sample_xlsx(conn=Depends(get_conn)):
-    """下载示例导入表（测试期功能，上线前移除）。"""
+    """下载示例导入表。"""
     from openpyxl import Workbook
 
     from app.seed import SAMPLE_IMPORT_ROWS, SAMPLE_IMPORT_ROWS_HEADER

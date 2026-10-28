@@ -18,7 +18,6 @@ CREATE TABLE IF NOT EXISTS container_type (
     volume REAL,
     freight_price REAL NOT NULL DEFAULT 0,
     enabled INTEGER NOT NULL DEFAULT 1,
-    max_stack_layers INTEGER,
     remark TEXT
 );
 
@@ -41,6 +40,7 @@ CREATE TABLE IF NOT EXISTS package_master (
     same_type_stack INTEGER DEFAULT 0,
     default_loading TEXT,
     max_stack INTEGER,
+    max_load REAL,
     enabled INTEGER NOT NULL DEFAULT 1,
     remark TEXT
 );
@@ -163,6 +163,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
     cols = {row["name"] for row in conn.execute("PRAGMA table_info(container_type)").fetchall()}
     if "freight_price" not in cols:
         conn.execute("ALTER TABLE container_type ADD COLUMN freight_price REAL NOT NULL DEFAULT 0")
-    if "max_stack_layers" not in cols:
-        conn.execute("ALTER TABLE container_type ADD COLUMN max_stack_layers INTEGER")
+    pkg_cols = {row["name"] for row in conn.execute("PRAGMA table_info(package_master)").fetchall()}
+    if "max_load" not in pkg_cols:
+        conn.execute("ALTER TABLE package_master ADD COLUMN max_load REAL")
     conn.commit()

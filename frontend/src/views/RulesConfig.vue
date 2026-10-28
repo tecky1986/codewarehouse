@@ -23,14 +23,14 @@ const stepDone = computed(() => {
 });
 
 const ALL_RULES = [
-  { key: "site_together", label: "Site 同柜" },
-  { key: "pn_continuous", label: "PN 连续" },
-  { key: "site_separate", label: "Site 分离" },
-  { key: "same_type_stack", label: "同种堆叠" },
-  { key: "max_stack_layers", label: "堆码层数" },
-  { key: "crush", label: "易压" },
-  { key: "weight_order", label: "轻重" },
-  { key: "fork_tine", label: "装卸" },
+  { key: "site_together", label: "Site 同柜", desc: "勾选后，标记为「同柜」的 Site 货物尽量装入同一集装箱" },
+  { key: "pn_continuous", label: "PN 连续", desc: "同一 PN 的货物尽量连续放置，避免分散在不同箱内" },
+  { key: "site_separate", label: "Site 分离", desc: "勾选后，标记为「分离」的 Site 货物尽量装入不同集装箱" },
+  { key: "same_type_stack", label: "同种堆叠", desc: "允许相同型号的货物上下堆叠" },
+  { key: "max_stack_layers", label: "堆码层数", desc: "限制堆叠层数，取货物 max_stack；被压箱的每箱承重量（max_load）超限也违规" },
+  { key: "crush", label: "易压", desc: "易压货物（crush_sensitive）不能压在其它货物上方" },
+  { key: "weight_order", label: "轻重", desc: "重物在下、轻物在上，减少压损" },
+  { key: "fork_tine", label: "装卸", desc: "考虑叉车装卸顺序，便于从门口依次取出" },
 ];
 
 const rules = ref<Record<string, boolean>>({});
@@ -129,7 +129,10 @@ onMounted(load);
           @change="rules[key] = !rules[key]; saved = false"
         />
         <span class="prio">P{{ i + 1 }}</span>
-        <span class="label">{{ ALL_RULES.find((r) => r.key === key)?.label }}</span>
+        <div class="rule-text">
+          <span class="label">{{ ALL_RULES.find((r) => r.key === key)?.label }}</span>
+          <span class="desc">{{ ALL_RULES.find((r) => r.key === key)?.desc }}</span>
+        </div>
         <div class="btns">
           <button @click="move(key, -1)" :disabled="i === 0" title="上移">↑</button>
           <button @click="move(key, 1)" :disabled="i === ruleOrder.length - 1" title="下移">↓</button>
@@ -165,7 +168,9 @@ a.ghost { color: #888; text-decoration: none; font-size: 14px; }
 .rule-row.off { opacity: 0.55; }
 .rule-row input { cursor: pointer; }
 .prio { font-size: 12px; color: #888; min-width: 26px; }
-.label { flex: 1; font-size: 14px; color: #333; }
+.rule-text { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.label { font-size: 14px; color: #333; font-weight: 500; }
+.desc { font-size: 12px; color: #999; line-height: 1.4; }
 .btns { display: flex; gap: 4px; }
 .btns button { padding: 2px 8px; border: 1px solid #ccc; border-radius: 3px; background: #fff; cursor: pointer; font-size: 12px; }
 .btns button:disabled { opacity: 0.3; cursor: not-allowed; }

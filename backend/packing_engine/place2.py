@@ -50,18 +50,41 @@ def _try_at_cap(
     return None
 
 
-def _advance_cursor(cand: Candidate, c: ContainerInstance) -> tuple[float, float, float]:
-    """Wall cursor after placing cand: fill width, then height, then new wall."""
-    cap = cand.x
-    y = cand.y + cand.dy
-    z = cand.z
-    if y >= c.inner_w - 1e-9:
-        y = 0.0
-        z = cand.z + cand.dz
-    if z >= c.inner_h - 1e-9:
-        cap = float(c.inner_l)
-        z = 0.0
-    return (cap, y, z)
+def _advance_cursor(
+    cand: Candidate,
+    c: ContainerInstance,
+    cap: float,
+    row_max_dx: float,
+    row_max_dz: float,
+    layer_max_dx: float,
+) -> tuple[float, float, float, float, float, float]:
+    """Advance the wall cursor after placing cand.
+
+    Returns (cap, y, z, row_max_dx, row_max_dz, layer_max_dx).
+
+    Within a row (y direction) the cap stays fixed.  When the row is full
+    (y overflows inner_w) the cursor moves to the next z-row, keeping the
+    cap unchanged.  When z overflows inner_h the cap is pushed door-ward
+    by the layer's deepest item and z resets to 0.
+    """
+    new_y = cand.y + cand.dy
+    new_row_max_dx = max(row_max_dx, cand.dx)
+    new_row_max_dz = max(row_max_dz, cand.dz)
+    new_layer_max_dx = max(layer_max_dx, cand.dx)
+
+    if new_y < c.inner_w - 1e-9:
+        # same row: advance along y, cap unchanged
+        return (cap, new_y, cand.z, new_row_max_dx, new_row_max_dz, new_layer_max_dx)
+
+    # row full: move to next z-row, cap unchanged
+    new_z = cand.z + new_row_max_dz
+    if new_z >= c.inner_h - 1e-9:
+        # z-layer full: push cap door-ward, reset z and y
+        new_cap = cap - new_layer_max_dx
+        if new_cap <= 1e-9:
+            return (float(c.inner_l), 0.0, 0.0, 0.0, 0.0, 0.0)
+        return (new_cap, 0.0, 0.0, 0.0, 0.0, 0.0)
+    return (cap, 0.0, new_z, 0.0, 0.0, new_layer_max_dx)
 
 
 # ---------------------------------------------------------------------------
@@ -107,7 +130,10 @@ def extreme_point(
 
 
 # ---------------------------------------------------------------------------
-# Wall building: each container carries a (cap, y, z) cursor.
+# Wall building: each container carries a (cap, y, z, row_max_dx, row_max_dz)
+# cursor.  A row is a y-direction strip at a fixed z; all items in a row are
+# flush with the row's back cap.  When a row is full the cursor advances to
+# the next z-row and the cap is pushed door-ward by the row's deepest item.
 # ---------------------------------------------------------------------------
 
 
@@ -120,7 +146,10 @@ def wall_build(
     reporter: ProgressReporter,
 ) -> Plan:
     unassigned: list[CargoItem] = []
-    cursors: dict[int, tuple] = {id(c): (float(c.inner_l), 0.0, 0.0) for c in containers}
+    # cursor: (cap, y, z, row_max_dx, row_max_dz, layer_max_dx)
+    cursors: dict[int, tuple] = {
+        id(c): (float(c.inner_l), 0.0, 0.0, 0.0, 0.0, 0.0) for c in containers
+    }
 
     for item in order_items(items):
         if reporter.timed_out:
@@ -129,15 +158,31 @@ def wall_build(
             return _finish_plan("wall_build", containers, unassigned, timed_out=True)
         placed = False
         for c in containers:
-            cap, y, z = cursors[id(c)]
+            cap, y, z, row_max_dx, row_max_dz, layer_max_dx = cursors[id(c)]
             cand = _try_at_cap(cap, y, z, item, c, settings, enabled_rules)
             if cand is None:
-                # fall back to the deepest point of the same y/z row
-                cand = _try_at_cap(float(c.inner_l), y, z, item, c, settings, enabled_rules)
-            if cand is None:
-                continue
+                # primary failed: either the remaining y-space is too narrow
+                # for this item (partial row, close it and advance z) or the
+                # current y row is simply occupied.  Try the next z-row at the
+                # same cap, falling back to the start of the current row.
+                if y > 0.0:
+                    next_z = z + row_max_dz
+                    if row_max_dz <= 0:
+                        next_z = z + max(item.h, 1.0)
+                    if next_z + item.h <= c.inner_h + 1e-9:
+                        cand = _try_at_cap(cap, 0.0, next_z, item, c, settings, enabled_rules)
+                        if cand is not None:
+                            cursors[id(c)] = _advance_cursor(
+                                cand, c, cap, 0.0, 0.0, layer_max_dx
+                            )
+                            c.placed.append(cand)
+                            placed = True
+                            break
+                cand = _try_at_cap(cap, 0.0, z, item, c, settings, enabled_rules)
+                if cand is None:
+                    continue
             c.placed.append(cand)
-            cursors[id(c)] = _advance_cursor(cand, c)
+            cursors[id(c)] = _advance_cursor(cand, c, cap, row_max_dx, row_max_dz, layer_max_dx)
             placed = True
             break
         if not placed:
@@ -203,3 +248,4 @@ def guillotine(
 register("extreme_point", extreme_point)
 register("wall_build", wall_build)
 register("guillotine", guillotine)
+

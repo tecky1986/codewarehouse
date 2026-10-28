@@ -125,6 +125,14 @@ export interface ContainerKpi {
   constraint_ok_ratio?: number;
   cg_offset_mm?: number;
   freight_price?: number;
+  inner_l?: number;
+  inner_w?: number;
+  inner_h?: number;
+  door_w?: number | null;
+  door_h?: number | null;
+  verify_ok?: boolean;
+  verify_error_codes?: Record<string, number>;
+  unload_ok?: boolean;
 }
 
 export interface OverallKpi {
@@ -140,6 +148,9 @@ export interface OverallKpi {
   total_freight?: number;
   elapsed_s?: number;
   timed_out?: boolean;
+  verify_ok?: boolean;
+  verify_error_codes?: Record<string, number>;
+  unload_ok?: boolean;
 }
 
 export interface Plan {
@@ -351,6 +362,7 @@ export interface PackageMaster {
   same_type_stack?: number;
   default_loading?: string | null;
   max_stack?: number | null;
+  max_load?: number | null;
   enabled?: number;
 }
 

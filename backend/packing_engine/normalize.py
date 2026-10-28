@@ -141,6 +141,7 @@ def items_from_rows(rows: list[dict], packages: list[dict] | None = None, manual
             same_type_stack=bool((master or {}).get("same_type_stack", 0)),
             loading=str((master or {}).get("default_loading") or "manual"),
             max_stack=(master or {}).get("max_stack"),
+            max_load=(master or {}).get("max_load"),
             site=r.get("m_site"),
             outcase=r.get("f_outcase"),
             source_flag=r.get("source_flag") or "table",
@@ -172,7 +173,8 @@ def fixed_containers(
                 max_payload=float(row["max_payload"]),
                 volume_m3=float(row.get("volume") or 0),
                 freight_price=float(row.get("freight_price") or 0),
-                max_stack_layers=row.get("max_stack_layers"),
+                door_w=row.get("door_w"),
+                door_h=row.get("door_h"),
             )
         )
     return out
@@ -205,7 +207,8 @@ def fixed_containers_multi(
                     max_payload=float(row["max_payload"]),
                     volume_m3=float(row.get("volume") or 0),
                     freight_price=float(row.get("freight_price") or 0),
-                    max_stack_layers=row.get("max_stack_layers"),
+                    door_w=row.get("door_w"),
+                    door_h=row.get("door_h"),
                 )
             )
     return out
