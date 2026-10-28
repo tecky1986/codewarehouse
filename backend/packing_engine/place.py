@@ -35,7 +35,7 @@ class ProgressReporter:
         self.total = max(total, 1)
         self.done = 0
         self.t0 = time.monotonic()
-        self.deadline = self.t0 + max(deadline_s, 0.000001)
+        self.deadline = self.t0 + max(deadline_s, 0.0)
         self.on_progress = on_progress
 
     def tick(self, n: int = 1) -> None:

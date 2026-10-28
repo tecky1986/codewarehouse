@@ -148,11 +148,11 @@ def test_compute_rejects_incomplete_rows(client):
 def test_multi_algorithm_timeout_marks_partial(client):
     tid = _make_task_with_rows(client)
     conn = client.conn
-    # set a very small time limit so the run times out
+    # set a very small time limit so the run times out immediately
     conn.execute(
         "INSERT INTO app_setting (key, value) VALUES ('time_limit_s', ?) "
         "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-        (json.dumps(0.000001),),
+        (json.dumps(0),),
     )
     conn.commit()
     body = client.post(
