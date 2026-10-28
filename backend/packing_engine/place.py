@@ -35,6 +35,7 @@ class ProgressReporter:
         self.total = max(total, 1)
         self.done = 0
         self.t0 = time.monotonic()
+        self._immediate_timeout = deadline_s <= 0.0
         self.deadline = self.t0 + max(deadline_s, 0.0)
         self.on_progress = on_progress
 
@@ -52,6 +53,8 @@ class ProgressReporter:
 
     @property
     def timed_out(self) -> bool:
+        if self._immediate_timeout:
+            return True
         return time.monotonic() > self.deadline
 
     def remaining(self) -> float:
