@@ -275,31 +275,99 @@ def test_max_stack_layers_rule_item_limit():
 
 def test_max_stack_layers_rule_container_limit():
     box = _box()
-    box.max_stack_layers = 2
+    # container-level max_stack_layers removed; the limit now comes from the
+    # candidate item's own max_stack. The candidate here has max_stack=2,
+    # and is being placed at z=1000 (3rd layer), so it violates the limit.
     it = CargoItem(uid="t", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
-                   gross=10, net=10, rotatable=False)
+                   gross=10, net=10, rotatable=False, max_stack=2)
     ctx = CheckContext(settings={}, placed=[
         Candidate(item=CargoItem(uid="b", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
-                                  gross=10, net=10, rotatable=False),
-                  container=box, x=0, y=0, z=0, dx=1000, dy=1000, dz=500, load_seq=1),
+                                  gross=10, net=10, rotatable=False, max_stack=2),
+                   container=box, x=0, y=0, z=0, dx=1000, dy=1000, dz=500, load_seq=1),
         Candidate(item=CargoItem(uid="b2", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
-                                  gross=10, net=10, rotatable=False),
-                  container=box, x=0, y=0, z=500, dx=1000, dy=1000, dz=500, load_seq=2),
+                                  gross=10, net=10, rotatable=False, max_stack=2),
+                   container=box, x=0, y=0, z=500, dx=1000, dy=1000, dz=500, load_seq=2),
     ])
     cand = Candidate(item=it, container=box, x=0, y=0, z=1000, dx=1000, dy=1000, dz=500, load_seq=3)
     v = run_checkers(cand, ctx, ["max_stack_layers"])
     assert ("max_stack_layers", "超过最大堆码层数（上限 2 层）") in v
 
 
+# ---- max_load rule -----------------------------------------------------
+
+def test_max_load_exceeds_capacity():
+    box = _box()
+    base = CargoItem(uid="b", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
+                     gross=10, net=10, rotatable=False, max_load=100)
+    top = CargoItem(uid="t", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
+                    gross=200, net=200, rotatable=False)
+    ctx = CheckContext(settings={}, placed=[
+        Candidate(item=base, container=box, x=0, y=0, z=0, dx=1000, dy=1000, dz=500, load_seq=1),
+    ])
+    cand = Candidate(item=top, container=box, x=0, y=0, z=500, dx=1000, dy=1000, dz=500, load_seq=2)
+    v = run_checkers(cand, ctx, ["max_stack_layers"])
+    assert ("max_stack_layers", "被压货物承重超限（100 kg）") in v
+
+
+def test_max_load_half_weight_cross_box():
+    box = _box()
+    # two supports side-by-side, one is a cross-box split (straddling)
+    base1 = CargoItem(uid="b1", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
+                      gross=10, net=10, rotatable=False, max_load=100)
+    base2 = CargoItem(uid="b2", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
+                      gross=10, net=10, rotatable=False, max_load=100)
+    # top straddles both base items -> each gets half the top weight
+    top = CargoItem(uid="t", pn=None, packmatls=None, cargo_type="A", l=2000, w=1000, h=500,
+                    gross=250, net=250, rotatable=False)
+    ctx = CheckContext(settings={}, placed=[
+        Candidate(item=base1, container=box, x=0, y=0, z=0, dx=1000, dy=1000, dz=500, load_seq=1),
+        Candidate(item=base2, container=box, x=1000, y=0, z=0, dx=1000, dy=1000, dz=500, load_seq=2),
+    ])
+    cand = Candidate(item=top, container=box, x=0, y=0, z=500, dx=2000, dy=1000, dz=500, load_seq=3)
+    # half-weight: 125 kg on each base, exceeds 100 kg capacity -> violation
+    v = run_checkers(cand, ctx, ["max_stack_layers"])
+    assert ("max_stack_layers", "被压货物承重超限（100 kg）") in v
+
+
+def test_max_load_half_weight_cross_box_within_limit():
+    box = _box()
+    base1 = CargoItem(uid="b1", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
+                      gross=10, net=10, rotatable=False, max_load=100)
+    base2 = CargoItem(uid="b2", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
+                      gross=10, net=10, rotatable=False, max_load=100)
+    top = CargoItem(uid="t", pn=None, packmatls=None, cargo_type="A", l=2000, w=1000, h=500,
+                    gross=100, net=100, rotatable=False)
+    ctx = CheckContext(settings={}, placed=[
+        Candidate(item=base1, container=box, x=0, y=0, z=0, dx=1000, dy=1000, dz=500, load_seq=1),
+        Candidate(item=base2, container=box, x=1000, y=0, z=0, dx=1000, dy=1000, dz=500, load_seq=2),
+    ])
+    cand = Candidate(item=top, container=box, x=0, y=0, z=500, dx=2000, dy=1000, dz=500, load_seq=3)
+    # half-weight: 50 kg on each base, 50 <= 100 -> no violation
+    v = run_checkers(cand, ctx, ["max_stack_layers"])
+    assert ("max_stack_layers", "被压货物承重超限") not in v
+
+
+def test_max_load_none_unlimited():
+    box = _box()
+    base = CargoItem(uid="b", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
+                     gross=10, net=10, rotatable=False)  # max_load=None
+    top = CargoItem(uid="t", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
+                    gross=9999, net=9999, rotatable=False)
+    ctx = CheckContext(settings={}, placed=[
+        Candidate(item=base, container=box, x=0, y=0, z=0, dx=1000, dy=1000, dz=500, load_seq=1),
+    ])
+    cand = Candidate(item=top, container=box, x=0, y=0, z=500, dx=1000, dy=1000, dz=500, load_seq=2)
+    assert run_checkers(cand, ctx, ["max_stack_layers"]) == []
+
+
 def test_max_stack_layers_no_violation_within_limit():
     box = _box()
-    box.max_stack_layers = 3
     it = CargoItem(uid="t", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
-                   gross=10, net=10, rotatable=False)
+                   gross=10, net=10, rotatable=False, max_stack=3)
     ctx = CheckContext(settings={}, placed=[
         Candidate(item=CargoItem(uid="b", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
-                                  gross=10, net=10, rotatable=False),
-                  container=box, x=0, y=0, z=0, dx=1000, dy=1000, dz=500, load_seq=1),
+                                  gross=10, net=10, rotatable=False, max_stack=3),
+                   container=box, x=0, y=0, z=0, dx=1000, dy=1000, dz=500, load_seq=1),
     ])
     cand = Candidate(item=it, container=box, x=0, y=0, z=500, dx=1000, dy=1000, dz=500, load_seq=2)
     assert run_checkers(cand, ctx, ["max_stack_layers"]) == []

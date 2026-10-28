@@ -27,6 +27,20 @@ function pct(v: number | undefined): string {
   return (v * 100).toFixed(1) + "%";
 }
 
+function errorCodesText(codes?: Record<string, number> | null): string {
+  if (!codes) return "";
+  return Object.entries(codes)
+    .map(([k, n]) => (n > 1 ? `${k}×${n}` : k))
+    .join(" ");
+}
+
+function verifyText(p: Plan): string {
+  const o = p.kpi.overall;
+  if (o.verify_ok == null) return "—";
+  if (o.verify_ok) return "通过";
+  return errorCodesText(o.verify_error_codes) || "未通过";
+}
+
 async function load() {
   loading.value = true;
   error.value = "";
@@ -102,6 +116,14 @@ onMounted(load);
             <span class="cap">完成率</span>
           </div>
           <div class="metric">
+            <span class="num">{{ pct(p.kpi.overall.constraint_ok_ratio) }}</span>
+            <span class="cap">约束满足</span>
+          </div>
+          <div class="metric">
+            <span class="num" :class="{ fail: p.kpi.overall.verify_ok === false }">{{ verifyText(p) }}</span>
+            <span class="cap">校验</span>
+          </div>
+          <div class="metric">
             <span class="num">{{ p.kpi.overall.unassigned_count ?? 0 }}</span>
             <span class="cap">未分配</span>
           </div>
@@ -110,6 +132,9 @@ onMounted(load);
             <span class="cap">耗时</span>
           </div>
         </div>
+        <p v-if="p.kpi.overall.verify_ok === false" class="verify-hint">
+          E102 表示当前排未填满就开了新排；砌墙 / 切割遵守行纪律。
+        </p>
 
         <div class="foot">
           <button
@@ -146,9 +171,11 @@ a.ghost:hover { color: #1a5c38; }
 .algo { font-weight: 600; font-size: 15px; color: #2c2c2c; text-transform: uppercase; }
 .badge { font-size: 11px; padding: 1px 6px; border-radius: 3px; background: #e8f5e9; color: #1a5c38; }
 .ts { font-size: 12px; color: #999; margin-left: auto; }
-.metrics { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.metrics { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; }
 .num { font-size: 18px; font-weight: 600; color: #2c2c2c; }
 .cap { font-size: 11px; color: #888; }
+.fail { color: #c62828; }
+.verify-hint { font-size: 12px; color: #888; margin: 10px 0 0; }
 .foot { display: flex; gap: 8px; margin-top: 14px; align-items: center; }
 button.primary { padding: 5px 16px; background: #1a5c38; color: #fff; border: none; border-radius: 4px; font-size: 13px; cursor: pointer; }
 button.primary:disabled { opacity: 0.4; cursor: default; }

@@ -453,3 +453,53 @@ def test_freemix_mode_requires_type_lock(client):
         f"/api/tasks/{tid}/compute", json={"algorithms": ["freemix"]}
     ).json()
     assert resp["code"] != 0
+
+
+def test_compute_kpi_includes_verify_and_inner_dims(client):
+    tid = _make_task_with_rows(client)
+    body = client.post(
+        f"/api/tasks/{tid}/compute",
+        json={"algorithms": ["wall_build"]},
+    ).json()
+    assert body["code"] == 0, body
+    finished = _wait_job(client, body["data"]["id"])
+    assert finished["status"] == "done"
+    plans = client.get(f"/api/tasks/{tid}/plans").json()["data"]
+    assert len(plans) == 1
+    overall = plans[0]["kpi"]["overall"]
+    assert "verify_ok" in overall
+    assert "verify_error_codes" in overall
+    assert "constraint_ok_ratio" in overall
+    per = plans[0]["kpi"]["per_container"]
+    assert per
+    for c in per:
+        assert c.get("inner_l")
+        assert c.get("inner_w")
+        assert c.get("inner_h")
+        assert "door_w" in c
+        assert "door_h" in c
+
+
+def test_compute_keeps_recent_runs(client):
+    from app.jobs import KEEP_RUNS
+
+    tid = _make_task_with_rows(client)
+    run_ids = []
+    for _ in range(KEEP_RUNS + 1):
+        body = client.post(
+            f"/api/tasks/{tid}/compute",
+            json={"algorithms": ["dblf"]},
+        ).json()
+        assert body["code"] == 0, body
+        finished = _wait_job(client, body["data"]["id"])
+        assert finished["status"] == "done"
+        run_ids.append(body["data"]["id"])
+    remaining = [
+        r["id"]
+        for r in client.conn.execute(
+            "SELECT id FROM packing_run WHERE task_id = ? ORDER BY id",
+            (tid,),
+        ).fetchall()
+    ]
+    assert len(remaining) == KEEP_RUNS
+    assert remaining == run_ids[-KEEP_RUNS:]

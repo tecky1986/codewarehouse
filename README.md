@@ -53,7 +53,7 @@ npm run dev
 ### 测试
 
 ```bash
-cd backend && python3 -m pytest -q     # 43 passed
+cd backend && python3 -m pytest -q
 cd frontend && npm test -- --run && npm run build
 ```
 

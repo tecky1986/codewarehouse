@@ -77,6 +77,7 @@ PACKAGE_MASTER_HEADERS = [
     "same_type_stack",
     "default_loading",
     "max_stack",
+    "max_load",
     "enabled",
     "remark",
 ]
@@ -101,6 +102,7 @@ _PACKAGE_HEADER_ALIASES = {
     "同种堆叠": "same_type_stack",
     "默认装卸": "default_loading",
     "最大堆码": "max_stack",
+    "每箱承重": "max_load",
     "启用": "enabled",
     "备注": "remark",
 }
@@ -194,6 +196,7 @@ def import_packages(content: bytes) -> list[dict]:
                 "same_type_stack": item.get("same_type_stack"),
                 "default_loading": _to_str(item.get("default_loading")),
                 "max_stack": _to_num(item.get("max_stack")),
+                "max_load": _to_num(item.get("max_load")),
                 "enabled": item.get("enabled") if item.get("enabled") is not None else 1,
                 "remark": _to_str(item.get("remark")),
             }

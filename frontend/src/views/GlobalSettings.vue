@@ -11,7 +11,7 @@ const FIELDS = [
   { key: "manual_limit_kg", label: "人工搬运上限", unit: "kg" },
   { key: "fork_tine_mm", label: "叉车铲齿长度", unit: "mm" },
   { key: "time_limit_s", label: "算法计算时限", unit: "s" },
-  { key: "gap_mm", label: "货物间隙", unit: "mm" },
+  { key: "gap_mm", label: "货物间隙（左右/前后）", unit: "mm", desc: "上下堆叠无间距，不受此值影响" },
 ];
 
 async function load() {

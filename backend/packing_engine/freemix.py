@@ -23,6 +23,8 @@ def _instances_for(types: list[tuple[str, int]], catalog: dict[str, ContainerIns
                     max_payload=proto.max_payload,
                     volume_m3=proto.volume_m3,
                     freight_price=getattr(proto, "freight_price", 0.0),
+                    door_w=getattr(proto, "door_w", None),
+                    door_h=getattr(proto, "door_h", None),
                 )
             )
     return out

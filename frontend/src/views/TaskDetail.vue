@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, computed, nextTick } from "vue";
 import { useRoute } from "vue-router";
 import {
   Tasks,
@@ -27,12 +27,32 @@ const selectedPlan = ref<Plan | null>(null);
 const placements = ref<Placement[]>([]);
 const jobId = ref<number | null>(null);
 const showJob = ref(false);
+const jobSectionRef = ref<HTMLElement | null>(null);
 const containers = ref<ContainerType[]>([]);
 const preview = ref<ImportPreview | null>(null);
 const error = ref("");
 
 const selected = ref<Placement | null>(null);
 const algos = ref<string[]>(ALGORITHMS.filter((a) => a.key !== "freemix").map((a) => a.key));
+
+function pct(v: number | undefined | null): string {
+  if (v == null) return "—";
+  return (v * 100).toFixed(1) + "%";
+}
+
+function errorCodesText(codes?: Record<string, number> | null): string {
+  if (!codes) return "";
+  return Object.entries(codes)
+    .map(([k, n]) => (n > 1 ? `${k}×${n}` : k))
+    .join(" ");
+}
+
+function verifyText(p: Plan): string {
+  const o = p.kpi.overall;
+  if (o.verify_ok == null) return "—";
+  if (o.verify_ok) return "通过";
+  return errorCodesText(o.verify_error_codes) || "未通过";
+}
 
 const _parseJsonField = (v: unknown): Record<string, unknown> => {
   if (v == null) return {};
@@ -223,6 +243,8 @@ async function startCompute() {
     jobId.value = job.id;
     showJob.value = true;
     task.value.status = "computing";
+    await nextTick();
+    jobSectionRef.value?.scrollIntoView({ behavior: "smooth", block: "center" });
   } catch (e) {
     error.value = (e as Error).message;
   }
@@ -290,6 +312,7 @@ function ruleLabel(key: string): string {
     pn_continuous: "PN 连续",
     site_separate: "Site 分离",
     same_type_stack: "同种堆叠",
+    max_stack_layers: "堆码层数（含承重检查）",
     crush: "易压",
     weight_order: "轻重",
     fork_tine: "装卸",
@@ -413,13 +436,15 @@ onMounted(loadTask);
       </div>
     </section>
 
-    <JobProgress
-      v-if="showJob && jobId"
-      :jobId="jobId"
-      :taskName="task.name"
-      @done="onJobDone($event)"
-      @failed="onJobFailed($event)"
-    />
+    <section v-if="showJob && jobId" ref="jobSectionRef" class="section job-section">
+      <h2>计算进度</h2>
+      <JobProgress
+        :jobId="jobId"
+        :taskName="task.name"
+        @done="onJobDone($event)"
+        @failed="onJobFailed($event)"
+      />
+    </section>
 
     <section v-if="plans.length" class="section">
       <h2>KPI 对照</h2>
@@ -437,6 +462,8 @@ onMounted(loadTask);
               <th>体积利用率</th>
               <th>载重利用率</th>
               <th>完成率</th>
+              <th>约束满足</th>
+              <th>校验</th>
               <th>未分配</th>
               <th>耗时s</th>
               <th></th>
@@ -454,7 +481,9 @@ onMounted(loadTask);
               <td>{{ p.kpi.overall.containers_used ?? "—" }}</td>
               <td>{{ p.kpi.overall.vol_util != null ? (p.kpi.overall.vol_util * 100).toFixed(1) + "%" : "—" }}</td>
               <td>{{ p.kpi.overall.pay_util != null ? (p.kpi.overall.pay_util * 100).toFixed(1) + "%" : "—" }}</td>
-              <td>{{ p.kpi.overall.completion != null ? (p.kpi.overall.completion * 100).toFixed(1) + "%" : "—" }}</td>
+              <td>{{ pct(p.kpi.overall.completion) }}</td>
+              <td>{{ pct(p.kpi.overall.constraint_ok_ratio) }}</td>
+              <td :class="{ fail: p.kpi.overall.verify_ok === false }">{{ verifyText(p) }}</td>
               <td>{{ p.kpi.overall.unassigned_count ?? 0 }}</td>
               <td>{{ p.kpi.overall.elapsed_s != null ? p.kpi.overall.elapsed_s.toFixed(1) : "—" }}</td>
               <td>
@@ -470,6 +499,7 @@ onMounted(loadTask);
           </tbody>
         </table>
       </div>
+      <p class="hint">E102 表示当前排未填满就开了新排；砌墙 / 切割遵守行纪律，DBLF / 最大空腔 / 极点可能出现该码。</p>
     </section>
 
     <section v-if="selectedPlan" class="section">
@@ -490,19 +520,19 @@ onMounted(loadTask);
               <th>载重利用率</th>
               <th>顺序正确率</th>
               <th>约束满足率</th>
+              <th>校验</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="c in selectedPlan.kpi.per_container" :key="c.label">
               <td>{{ c.label }}</td>
               <td>{{ c.item_count }}</td>
-              <td>{{ c.vol_util != null ? (c.vol_util * 100).toFixed(1) + "%" : "—" }}</td>
-              <td>{{ c.pay_util != null ? (c.pay_util * 100).toFixed(1) + "%" : "—" }}</td>
-              <td>
-                {{ c.load_seq_correct_ratio != null ? (c.load_seq_correct_ratio * 100).toFixed(1) + "%" : "—" }}
-              </td>
-              <td>
-                {{ c.constraint_ok_ratio != null ? (c.constraint_ok_ratio * 100).toFixed(1) + "%" : "—" }}
+              <td>{{ pct(c.vol_util) }}</td>
+              <td>{{ pct(c.pay_util) }}</td>
+              <td>{{ pct(c.load_seq_correct_ratio) }}</td>
+              <td>{{ pct(c.constraint_ok_ratio) }}</td>
+              <td :class="{ fail: c.verify_ok === false }">
+                {{ c.verify_ok == null ? "—" : c.verify_ok ? "通过" : (errorCodesText(c.verify_error_codes) || "未通过") }}
               </td>
             </tr>
           </tbody>
@@ -595,6 +625,7 @@ button.primary:disabled { opacity: 0.4; cursor: not-allowed; }
 .kpi tr.active td { background: #f5f8f6; }
 .kpi tbody tr { cursor: pointer; }
 .algo-name { font-weight: 600; color: #2c2c2c; text-transform: uppercase; }
+.fail { color: #c62828; }
 button.adopt { padding: 3px 12px; border: 1px solid #1a5c38; border-radius: 4px; background: transparent; color: #1a5c38; font-size: 12px; cursor: pointer; }
 button.adopt:disabled { opacity: 0.5; cursor: default; border-color: #ccc; color: #888; }
 .per-kpi { width: 100%; border-collapse: collapse; margin-top: 16px; min-width: 640px; }
@@ -603,6 +634,7 @@ button.adopt:disabled { opacity: 0.5; cursor: default; border-color: #ccc; color
 .sel-card { display: flex; gap: 16px; align-items: center; padding: 8px 12px; background: #f9f7f4; border: 1px solid #e8e4e0; border-radius: 6px; font-size: 13px; color: #444; flex-wrap: wrap; }
 .sel-card .pn { font-weight: 600; color: #1a5c38; }
 .unassign { color: #c62828; }
+.job-section { border: 1px solid #d9e8df; background: #f4f9f6; border-radius: 10px; padding: 16px 20px; }
 .empty { color: #999; font-size: 14px; padding: 24px 0; text-align: center; }
 
 @media (max-width: 900px) {

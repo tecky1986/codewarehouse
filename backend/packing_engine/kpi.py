@@ -32,7 +32,13 @@ def _per_container(c, total_elapsed: float = 0.0) -> dict:
             min_so_far = face if min_so_far is None else min(min_so_far, face)
 
     # constraint satisfaction: share of placements without degraded rules
-    ok = sum(1 for p in items if not getattr(p, "degraded_rules", None))
+    # or per-step verify errors (E101–E112) attached by attach_verify.
+    ok = 0
+    for p in items:
+        degraded = getattr(p, "degraded_rules", None)
+        step_errors = getattr(p, "verify_errors", None)
+        if not degraded and not step_errors:
+            ok += 1
 
     # center of gravity offset along x
     if n and gross_used > 0:
@@ -55,6 +61,11 @@ def _per_container(c, total_elapsed: float = 0.0) -> dict:
         "constraint_ok_ratio": (ok / n) if n else 1.0,
         "cg_offset_mm": cg_offset,
         "freight_price": freight,
+        "inner_l": c.inner_l,
+        "inner_w": c.inner_w,
+        "inner_h": c.inner_h,
+        "door_w": getattr(c, "door_w", None),
+        "door_h": getattr(c, "door_h", None),
     }
 
 
@@ -110,5 +121,61 @@ def evaluate(plan: Plan, total_items: int, per_algo_elapsed: Optional[dict] = No
     return {"per_container": per, "overall": overall}
 
 
-__all__ = ["evaluate"]
+def attach_verify(plan: Plan, report) -> dict:
+    """Merge a PlanReport into plan.kpi and per-placement verify_errors.
+
+    Returns the updated kpi dict (also stored on plan.kpi).
+    """
+    by_label = {c.label: c for c in report.containers}
+    for c in plan.containers:
+        crep = by_label.get(c.label)
+        if crep is None:
+            continue
+        err_by_uid: dict[str, list] = {}
+        for s in crep.steps:
+            if s.errors:
+                err_by_uid.setdefault(s.uid, []).extend(list(s.errors))
+        for p in c.placed:
+            errs = err_by_uid.get(p.item.uid)
+            if errs:
+                p.verify_errors = errs
+
+    kpi = plan.kpi or evaluate(plan, sum(len(c.placed) for c in plan.containers) + len(plan.unassigned or []))
+    overall = kpi.setdefault("overall", {})
+    overall["verify_ok"] = bool(report.ok)
+    overall["verify_error_codes"] = dict(report.error_codes)
+    overall["unload_ok"] = all(c.unload_ok for c in report.containers)
+    per = kpi.get("per_container") or []
+    per_by_label = {p["label"]: p for p in per}
+    for c in report.containers:
+        entry = per_by_label.get(c.label)
+        if entry is None:
+            continue
+        n = entry.get("item_count") or 0
+        bad = {s.uid for s in c.steps if s.errors}
+        entry["constraint_ok_ratio"] = ((n - len(bad)) / n) if n else 1.0
+        entry["verify_ok"] = c.ok
+        entry["verify_error_codes"] = dict(c.error_codes)
+        entry["unload_ok"] = c.unload_ok
+    for c in plan.containers:
+        entry = per_by_label.get(c.label)
+        if entry is None:
+            continue
+        entry["inner_l"] = c.inner_l
+        entry["inner_w"] = c.inner_w
+        entry["inner_h"] = c.inner_h
+        entry["door_w"] = getattr(c, "door_w", None)
+        entry["door_h"] = getattr(c, "door_h", None)
+    n_assigned = sum(p.get("item_count") or 0 for p in per)
+    if n_assigned > 0:
+        overall["constraint_ok_ratio"] = sum(
+            p.get("constraint_ok_ratio", 1.0) * (p.get("item_count") or 0) for p in per
+        ) / n_assigned
+    else:
+        overall["constraint_ok_ratio"] = 1.0
+    plan.kpi = kpi
+    return kpi
+
+
+__all__ = ["evaluate", "attach_verify"]
 _dataclass = dataclass  # noqa

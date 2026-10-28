@@ -38,6 +38,7 @@ let outline: THREE.LineSegments | null = null;
 let controls: OrbitControls | null = null;
 let animId = 0;
 let playTimer: ReturnType<typeof setInterval> | null = null;
+let resizeObserver: ResizeObserver | null = null;
 
 const active = computed(
   () => props.containers[activeIdx.value] ?? props.containers[0] ?? null,
@@ -56,19 +57,19 @@ const totalSteps = computed(() => containerPlacements.value.length);
 
 function dims(): { l: number; w: number; h: number } {
   const t = active.value;
-  if (t && t.payload_capacity_kg > 0) {
-    const code = t.type_code || "";
-    const map: Record<string, { l: number; w: number; h: number }> = {
-      "20GP": { l: 5900, w: 2350, h: 2390 },
-      "40GP": { l: 12030, w: 2350, h: 2390 },
-      "40HC": { l: 12030, w: 2350, h: 2685 },
-      "40HQ": { l: 12030, w: 2350, h: 2685 },
-      "45HC": { l: 16150, w: 2350, h: 2685 },
-      "20RF": { l: 5900, w: 2350, h: 2390 },
-    };
-    return map[code] || { l: 5900, w: 2350, h: 2390 };
+  if (t && t.inner_l && t.inner_w && t.inner_h) {
+    return { l: t.inner_l, w: t.inner_w, h: t.inner_h };
   }
-  return { l: 5900, w: 2350, h: 2390 };
+  const code = (t && t.type_code) || "";
+  const map: Record<string, { l: number; w: number; h: number }> = {
+    "20GP": { l: 5898, w: 2352, h: 2393 },
+    "40GP": { l: 12032, w: 2352, h: 2393 },
+    "40HC": { l: 12032, w: 2352, h: 2698 },
+    "40HQ": { l: 12032, w: 2352, h: 2698 },
+    "45HC": { l: 13556, w: 2352, h: 2698 },
+    "20RF": { l: 5455, w: 2294, h: 2264 },
+  };
+  return map[code] || { l: 5898, w: 2352, h: 2393 };
 }
 
 function buildScene() {
@@ -389,19 +390,31 @@ function toggleFullscreen() {
   } else {
     document.body.style.overflow = "";
   }
-  nextTick(() => onResize());
+  nextTick(() => {
+    onResize();
+    resetView();
+  });
+}
+
+function onFullscreenChange() {
+  /* reserved for native fullscreen API if needed */
 }
 
 onMounted(async () => {
   await nextTick();
   buildScene();
   resetView();
+  if (canvasEl.value) {
+    resizeObserver = new ResizeObserver(() => onResize());
+    resizeObserver.observe(canvasEl.value);
+  }
 });
 
 onBeforeUnmount(() => {
   stopPlayback();
   cancelAnimationFrame(animId);
   window.removeEventListener("resize", onResize);
+  resizeObserver?.disconnect();
   controls?.dispose();
   renderer?.dispose();
 });
@@ -442,12 +455,26 @@ defineExpose({
       </button>
     </div>
 
-    <div class="canvas-wrap" :class="{ maximized, fullscreen }">
+    <div
+      class="canvas-wrap"
+      :class="{ maximized, fullscreen }"
+      @fullscreenchange="onFullscreenChange"
+    >
       <canvas ref="canvasEl" class="canvas"></canvas>
       <div v-if="!active" class="empty">暂无集装箱</div>
-      <button @click="resetView" class="view-btn" title="复位视角">
-        复位视角
-      </button>
+      <div class="canvas-overlay">
+        <button @click="resetView" class="view-btn" title="复位视角">
+          复位视角
+        </button>
+        <button
+          v-if="fullscreen"
+          @click="toggleFullscreen"
+          class="view-btn exit-fs-btn"
+          title="退出全屏"
+        >
+          退出全屏
+        </button>
+      </div>
     </div>
 
     <div class="controls">
@@ -552,10 +579,7 @@ defineExpose({
 }
 
 .view-btn {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 10;
+  position: relative;
   padding: 6px 12px;
   border: 1px solid #ccc;
   border-radius: 4px;
@@ -563,6 +587,21 @@ defineExpose({
   cursor: pointer;
   font-size: 13px;
   color: #333;
+}
+
+.canvas-overlay {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  display: flex;
+  gap: 8px;
+}
+
+.exit-fs-btn {
+  background: rgba(26, 92, 56, 0.9);
+  color: #fff;
+  border-color: #1a5c38;
 }
 
 .max-btn {

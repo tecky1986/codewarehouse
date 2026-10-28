@@ -21,7 +21,11 @@ from packing_engine import normalize, runner
 from packing_engine.place import ProgressReporter
 from packing_engine import place2 as _place2  # noqa: F401  (registers algos)
 from packing_engine import ALGORITHMS
+from packing_engine.kpi import attach_verify, evaluate
 from packing_engine.model import ContainerInstance
+from packing_engine.verify import verify_plan
+
+KEEP_RUNS = 3
 
 DEFAULT_ALGORITHMS = ["dblf", "maxspace", "extreme_point", "wall_build", "guillotine", "freemix"]
 
@@ -189,23 +193,6 @@ class JobsService:
         ]
 
         with _WRITE_LOCK:
-            # Clear previous runs/plans for this task so a fresh compute
-            # does not leave stale KPI rows visible to the frontend.
-            self.conn.execute(
-                """
-                DELETE FROM packing_plan
-                WHERE id IN (
-                    SELECT p.id FROM packing_plan p
-                    JOIN packing_run r ON r.id = p.run_id
-                    WHERE r.task_id = ?
-                )
-                """,
-                (tid,),
-            )
-            self.conn.execute(
-                "DELETE FROM packing_run WHERE task_id = ?",
-                (tid,),
-            )
             cur = self.conn.execute(
                 "INSERT INTO packing_run (task_id, created_at, status, algorithms_json) VALUES (?, ?, 'running', ?)",
                 (
@@ -293,15 +280,16 @@ class JobsService:
             base = normalize.fixed_containers_multi(resolved, catalog)
             locks = None
 
-        import packing_engine.kpi as kpi_mod
-
         plans: list = []
         elapsed: dict[str, float] = {}
-        for name in job.algorithms:
+        lock = threading.Lock()
+
+        def _run_one(name: str):
             fn = ALGORITHMS.get(name)
             containers = [self._clone(c) for c in base]
+            local_items = list(items)
             rep = ProgressReporter(
-                total=len(items),
+                total=len(local_items),
                 deadline_s=float(settings.get("time_limit_s", 60)),
                 on_progress=self._progress_cb(job, name),
             )
@@ -309,20 +297,44 @@ class JobsService:
             try:
                 if locks is not None:
                     plan = normalize.freemix(
-                        items, containers, settings, enabled_rules, site_groups, rep, locks=locks
+                        local_items, containers, settings, enabled_rules, site_groups, rep, locks=locks
                     )
                 else:
-                    plan = fn(items, containers, settings, enabled_rules, site_groups, rep)
-            except Exception as exc:  # E_ENGINE: mark job failed, keep task intact
-                self.fail(job, f"{name}: {exc}")
-                return
-            elapsed[name] = round(time.monotonic() - t0, 3)
+                    plan = fn(local_items, containers, settings, enabled_rules, site_groups, rep)
+            except Exception as exc:
+                self.fail(job, f"{name}: 计算失败")
+                raise
+            took = round(time.monotonic() - t0, 3)
             plan.algorithm = name
-            plan.elapsed_s = elapsed[name]
-            plans.append(plan)
+            plan.elapsed_s = took
+            with lock:
+                elapsed[name] = took
+                plans.append(plan)
+
+        if len(job.algorithms) == 1:
+            try:
+                _run_one(job.algorithms[0])
+            except Exception:
+                return
+        else:
+            threads = []
+            for name in job.algorithms:
+                t = threading.Thread(target=_run_one, args=(name,), daemon=True)
+                threads.append(t)
+                t.start()
+            for t in threads:
+                t.join()
+            if job.status == "failed":
+                return
 
         for p in plans:
-            p.kpi = kpi_mod.evaluate(p, len(items), elapsed)
+            p.kpi = evaluate(p, len(items), elapsed)
+            try:
+                attach_verify(p, verify_plan(p))
+            except Exception:
+                overall = (p.kpi or {}).setdefault("overall", {})
+                overall["verify_ok"] = False
+                overall["verify_error_codes"] = {}
 
         self._persist(job, rows, plans, elapsed)
 
@@ -341,7 +353,8 @@ class JobsService:
             max_payload=float(row["max_payload"]),
             volume_m3=float(row.get("volume") or 0),
             freight_price=float(row.get("freight_price") or 0),
-            max_stack_layers=row.get("max_stack_layers"),
+            door_w=row.get("door_w"),
+            door_h=row.get("door_h"),
         )
 
     @staticmethod
@@ -358,8 +371,33 @@ class JobsService:
             max_payload=c.max_payload,
             volume_m3=c.volume_m3,
             freight_price=getattr(c, "freight_price", 0.0),
-            max_stack_layers=getattr(c, "max_stack_layers", None),
+            door_w=getattr(c, "door_w", None),
+            door_h=getattr(c, "door_h", None),
         )
+
+    def _prune_old_runs(self, tid: int, conn=None) -> None:
+        """Keep the newest KEEP_RUNS runs; drop older ones."""
+        db = conn or self.conn
+        rows = db.execute(
+            "SELECT id FROM packing_run WHERE task_id = ? ORDER BY id DESC",
+            (tid,),
+        ).fetchall()
+        if len(rows) <= KEEP_RUNS:
+            return
+        drop_ids = [r["id"] for r in rows[KEEP_RUNS:]]
+        placeholders = ",".join("?" * len(drop_ids))
+        db.execute(
+            f"""
+            DELETE FROM packing_plan
+            WHERE run_id IN ({placeholders})
+            """,
+            drop_ids,
+        )
+        db.execute(
+            f"DELETE FROM packing_run WHERE id IN ({placeholders})",
+            drop_ids,
+        )
+        db.commit()
 
     def _load_catalog(self) -> dict[str, dict]:
         rows = self.conn.execute(
@@ -450,6 +488,7 @@ class JobsService:
                     (job.task_id,),
                 )
                 wconn.commit()
+                self._prune_old_runs(job.task_id, conn=wconn)
             finally:
                 wconn.close()
 

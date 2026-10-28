@@ -36,8 +36,8 @@ Entries discovered by the Agent during task execution should follow this format:
 - Context: Discovered by Agent while performing task 1 project scaffold
 - Category: Build Methods
 - Instructions:
-  - Backend tests: `cd /workspace/backend && python3 -m pytest -q`
-  - Frontend tests: `cd /workspace/frontend && npm test`
+  - Backend tests: `cd /workspace/backend && python3 -m pytest -q`（当前 95 passed）
+  - Frontend tests: `cd /workspace/frontend && npm test`；改前端后需 `npm run typecheck && npm run build` 并同步 `frontend/dist` 到 `backend/static/` 再重启 uvicorn
   - Python deps: `pip3 install --break-system-packages -r /workspace/backend/requirements.txt`
   - Frontend deps: `cd /workspace/frontend && npm install`
   - Backend package root is `/workspace/backend` (`pythonpath = .`); API envelope is `{code, message, data}`

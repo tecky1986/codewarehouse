@@ -9,7 +9,7 @@ ctx = CheckContext with:
 
 from dataclasses import dataclass, field
 
-from packing_engine.geometry import EPS, inner_face_min, rests_on, supports, x_range_union, y_row_count, x_overlap, y_overlap
+from packing_engine.geometry import EPS, inner_face_min, rests_on, supports, x_range_union, x_overlap, y_overlap
 from packing_engine.model import Candidate, effective_loading
 
 
@@ -68,7 +68,11 @@ def chk_payload(cand: Candidate, ctx: CheckContext):
 
 
 def chk_stack_support(cand: Candidate, ctx: CheckContext):
-    """Elevated cargo must rest on 1 or 2 rows of equal-height supports."""
+    """Elevated cargo must rest on 1 or 2 rows of equal-height supports.
+
+    A support row split across two containers of the same PN (跨箱压放) is
+    treated as one logical row for the two-row limit.
+    """
     if cand.z <= EPS:
         return None
     under = supports(ctx.placed, cand)
@@ -77,9 +81,38 @@ def chk_stack_support(cand: Candidate, ctx: CheckContext):
     ref_h = under[0].dz
     if any(abs(p.dz - ref_h) > EPS for p in under):
         return "被压货物高度不一致"
-    if y_row_count(under) > 2:
+    rows = _support_rows(under, ctx)
+    if rows > 2:
         return "堆叠不得超过两排"
     return None
+
+
+def _support_rows(under: list, ctx: CheckContext) -> int:
+    """Count distinct width-rows among supports.
+
+    A physical row is a (x-span, z-level) band. Two bands belong to the same
+    logical row when they share the z-level, overlap in x, and carry the same
+    PN (a cross-container split of one PN). The PN 连续 rule enforces a
+    contiguity gap on the x-span, so a gap is added here as well.
+    """
+    bands: list[list] = []
+    for p in under:
+        found = None
+        for b in bands:
+            if (
+                abs(b[0] - p.z) < EPS
+                and b[0] - ctx.gap <= p.x
+                and p.x + p.dx <= b[1] + ctx.gap
+                and b[2] == p.item.pn
+            ):
+                found = b
+                break
+        if found is not None:
+            found[0] = min(found[0], p.z)
+            found[1] = max(found[1], p.x + p.dx)
+        else:
+            bands.append([p.z, p.x + p.dx, p.item.pn])
+    return len(bands)
 
 
 def _stack_depth(placed: list, x: float, y: float, dx: float, dy: float) -> int:
@@ -111,26 +144,55 @@ def _stack_depth(placed: list, x: float, y: float, dx: float, dy: float) -> int:
     return len(levels)
 
 
-def chk_max_stack_layers(cand: Candidate, ctx: CheckContext):
-    """Enforce per-item max_stack and container-level max_stack_layers.
+def _load_on_support(placed: list, p) -> float:
+    """Load resting on top face of placed item p.
 
-    The effective limit is the minimum of the two (None means unlimited).
-    Counts the stacking depth at the candidate footprint before placement;
-    adding this item would create one more level.
+    Supports that overlap p fully in the vertical (x/y) projection bear
+    their full weight; supports that straddle a container seam (their
+    footprint is not fully contained in p's) are split across containers
+    and bear only half (跨箱压放按 1/2 计).
+    """
+    total = 0.0
+    for q in placed:
+        if abs((q.z - p.z - p.dz)) > EPS:
+            continue
+        x_split = p.x <= q.x and q.x + q.dx <= p.x + p.dx
+        y_split = p.y <= q.y and q.y + q.dy <= p.y + p.dy
+        if x_split and y_split:
+            total += q.item.gross
+        else:
+            total += 0.5 * q.item.gross
+    return total
+
+
+def chk_max_stack_layers(cand: Candidate, ctx: CheckContext):
+    """Enforce per-item max_stack layers and per-box load capacity.
+
+    Layer limit: the item's own max_stack (None = unlimited).
+    Load limit: the supporting box's max_load (None = unlimited). The load
+    already resting on each support's top face plus the new item's weight
+    must not exceed the capacity.
     """
     item = cand.item
-    item_limit = item.max_stack
-    cont_limit = cand.container.max_stack_layers
-    limit = None
-    if item_limit is not None:
-        limit = item_limit
-    if cont_limit is not None:
-        limit = cont_limit if limit is None else min(limit, cont_limit)
-    if limit is None:
-        return None
-    depth = _stack_depth(ctx.placed, cand.x, cand.y, cand.dx, cand.dy)
-    if depth + 1 > limit:
-        return f"超过最大堆码层数（上限 {limit} 层）"
+    limit = item.max_stack
+    if limit is not None:
+        depth = _stack_depth(ctx.placed, cand.x, cand.y, cand.dx, cand.dy)
+        if depth + 1 > limit:
+            return f"超过最大堆码层数（上限 {limit} 层）"
+    under = supports(ctx.placed, cand)
+    if under:
+        worst = None
+        for p in under:
+            cap = p.item.max_load
+            if cap is None:
+                continue
+            load = _load_on_support(ctx.placed, p) + cand.item.gross
+            if load > cap + EPS:
+                if worst is None or load - cap > worst[1]:
+                    worst = (p, load - cap, cap)
+        if worst:
+            cap = worst[2]
+            return f"被压货物承重超限（{cap:.0f} kg）"
     return None
 
 

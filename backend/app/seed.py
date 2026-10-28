@@ -55,7 +55,7 @@ DEFAULT_SETTINGS = {
 }
 
 
-# 测试期示例数据：正式上线前移除（见 README 与 tasklist 18）
+# 示例数据：空库首次启动时写入，便于试用导入与匹配流程
 SAMPLE_PACKAGES = [
     {
         "pn": None,
@@ -103,7 +103,7 @@ SAMPLE_IMPORT_ROWS = [
 
 
 def seed_if_empty(conn, with_sample: bool = True) -> None:
-    """Preload preset data. with_sample=False 跳过测试期示例数据。"""
+    """Preload preset data. with_sample=False 跳过示例数据。"""
     from app.repos import (
         ContainerTypeRepo,
         PackageMasterRepo,
@@ -138,7 +138,7 @@ def seed_if_empty(conn, with_sample: bool = True) -> None:
     if not with_sample:
         return
 
-    # 示例包装主数据（测试期，上线前移除）
+    # 示例包装主数据
     pkg = PackageMasterRepo(conn)
     for item in SAMPLE_PACKAGES:
         pn = item.get("pn")
@@ -149,7 +149,7 @@ def seed_if_empty(conn, with_sample: bool = True) -> None:
             if not pkg.get_by_packmatls(item["package_type"]):
                 pkg.create(item)
 
-    # 示例任务 + 导入行（测试期，上线前移除）
+    # 示例任务 + 导入行
     from app.importing import map_raw_rows
 
     tasks = TaskRepo(conn)
