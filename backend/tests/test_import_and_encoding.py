@@ -10,6 +10,7 @@ from app.encoding import content_disposition, csv_bytes, decode_bytes
 from app.main import app
 
 SAMPLE = Path("/workspace/.monkeycode-tmp-files/d340e47a-Step3Output-1.xlsx")
+_need_sample = pytest.mark.skipif(not SAMPLE.exists(), reason="SAMPLE xlsx not available")
 
 
 @pytest.fixture
@@ -26,6 +27,7 @@ def _create_task(client, name="t"):
     return client.post("/api/tasks", json={"name": name}).json()["data"]["id"]
 
 
+@_need_sample
 def test_sample_ib1_uses_table_values(client):
     tid = _create_task(client)
     resp = client.post(
@@ -53,6 +55,7 @@ def test_sample_ib1_uses_table_values(client):
     assert any(m["pn"] == "ACW1081490*80" for m in body["missing"])
 
 
+@_need_sample
 def test_ven_filled_by_pn(client):
     client.post(
         "/api/packages",
@@ -124,6 +127,7 @@ def test_encoding_utf8_bom_gbk():
     assert "xlsx" in disp
 
 
+@_need_sample
 def test_chinese_header_roundtrip_and_pending_filename(client):
     tid = _create_task(client)
     client.post(
@@ -202,6 +206,7 @@ def test_packmatls_match_requires_dual_fields(client):
     assert row2["b_len"] == 600
 
 
+@_need_sample
 def test_packmatls_dual_field_match_when_pn_present(client):
     # a master record with the same PN and packmatls must fill the row
     client.post(
@@ -235,6 +240,7 @@ def test_packmatls_dual_field_match_when_pn_present(client):
     assert ven[0]["source_flag"] == "master"
 
 
+@_need_sample
 def test_batch_maintain_and_rematch(client):
     tid = _create_task(client)
     client.post(
@@ -264,6 +270,7 @@ def test_batch_maintain_and_rematch(client):
     assert ven[0]["b_len"] == 1200
 
 
+@_need_sample
 def test_site_groups_default_and_mutex(client):
     tid = _create_task(client)
     client.post(

@@ -218,6 +218,9 @@ def dblf(
     ordered = order_items(items)
     seen_uids: set = set()
 
+    if reporter.timed_out:
+        return _finish_plan("dblf", containers, list(ordered), timed_out=True)
+
     for item in ordered:
         if reporter.timed_out:
             rest = [i for i in ordered if i.uid not in seen_uids]
@@ -316,6 +319,9 @@ def maximal_space(
     unassigned: list[CargoItem] = []
     ordered = order_items(items)
     seen_uids: set = set()
+
+    if reporter.timed_out:
+        return _finish_plan("maxspace", containers, list(ordered), timed_out=True)
 
     for item in ordered:
         if reporter.timed_out:

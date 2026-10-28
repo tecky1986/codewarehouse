@@ -101,11 +101,18 @@ def extreme_point(
     reporter: ProgressReporter,
 ) -> Plan:
     unassigned: list[CargoItem] = []
-    for item in order_items(items):
+    ordered = order_items(items)
+    seen_uids: set = set()
+
+    if reporter.timed_out:
+        return _finish_plan("extreme_point", containers, list(ordered), timed_out=True)
+
+    for item in ordered:
         if reporter.timed_out:
-            rest = [i for i in order_items(items) if i.uid == item.uid]
+            rest = [i for i in ordered if i.uid not in seen_uids]
             unassigned.extend(rest)
             return _finish_plan("extreme_point", containers, unassigned, timed_out=True)
+        seen_uids.add(item.uid)
         placed = False
         for c in containers:
             caps = set()
@@ -150,12 +157,18 @@ def wall_build(
     cursors: dict[int, tuple] = {
         id(c): (float(c.inner_l), 0.0, 0.0, 0.0, 0.0, 0.0) for c in containers
     }
+    ordered = order_items(items)
+    seen_uids: set = set()
 
-    for item in order_items(items):
+    if reporter.timed_out:
+        return _finish_plan("wall_build", containers, list(ordered), timed_out=True)
+
+    for item in ordered:
         if reporter.timed_out:
-            rest = [i for i in order_items(items) if i.uid == item.uid]
+            rest = [i for i in ordered if i.uid not in seen_uids]
             unassigned.extend(rest)
             return _finish_plan("wall_build", containers, unassigned, timed_out=True)
+        seen_uids.add(item.uid)
         placed = False
         for c in containers:
             cap, y, z, row_max_dx, row_max_dz, layer_max_dx = cursors[id(c)]
@@ -207,12 +220,18 @@ def guillotine(
     unassigned: list[CargoItem] = []
     # shelves[id(c)] = list of {"cap": float, "y": float, "z": float}
     shelves: dict[int, list] = {id(c): [] for c in containers}
+    ordered = order_items(items)
+    seen_uids: set = set()
 
-    for item in order_items(items):
+    if reporter.timed_out:
+        return _finish_plan("guillotine", containers, list(ordered), timed_out=True)
+
+    for item in ordered:
         if reporter.timed_out:
-            rest = [i for i in order_items(items) if i.uid == item.uid]
+            rest = [i for i in ordered if i.uid not in seen_uids]
             unassigned.extend(rest)
             return _finish_plan("guillotine", containers, unassigned, timed_out=True)
+        seen_uids.add(item.uid)
         placed = False
         for c in containers:
             target = None
