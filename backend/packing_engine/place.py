@@ -35,7 +35,8 @@ class ProgressReporter:
         self.total = max(total, 1)
         self.done = 0
         self.t0 = time.monotonic()
-        self.deadline = self.t0 + max(deadline_s, 0.000001)
+        self._immediate_timeout = deadline_s <= 0.0
+        self.deadline = self.t0 + max(deadline_s, 0.0)
         self.on_progress = on_progress
 
     def tick(self, n: int = 1) -> None:
@@ -52,6 +53,8 @@ class ProgressReporter:
 
     @property
     def timed_out(self) -> bool:
+        if self._immediate_timeout:
+            return True
         return time.monotonic() > self.deadline
 
     def remaining(self) -> float:
@@ -218,6 +221,9 @@ def dblf(
     ordered = order_items(items)
     seen_uids: set = set()
 
+    if reporter.timed_out:
+        return _finish_plan("dblf", containers, list(ordered), timed_out=True)
+
     for item in ordered:
         if reporter.timed_out:
             rest = [i for i in ordered if i.uid not in seen_uids]
@@ -316,6 +322,9 @@ def maximal_space(
     unassigned: list[CargoItem] = []
     ordered = order_items(items)
     seen_uids: set = set()
+
+    if reporter.timed_out:
+        return _finish_plan("maxspace", containers, list(ordered), timed_out=True)
 
     for item in ordered:
         if reporter.timed_out:

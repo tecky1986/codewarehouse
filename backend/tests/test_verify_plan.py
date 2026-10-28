@@ -485,9 +485,9 @@ def test_dump_json_report_written():
         data["planned_unassigned"] = [i.uid for i in plan.unassigned]
         entries.append(data)
         print(f"[{algo}] ok={report.ok} errors={report.error_codes}")
-    out_path.write_text(json.dumps(entries, ensure_ascii=False, indent=2))
+    out_path.write_text(json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8")
     assert out_path.exists()
-    saved = json.loads(out_path.read_text())
+    saved = json.loads(out_path.read_text(encoding="utf-8"))
     assert len(saved) == 5, f"expected 5 algorithm entries, got {len(saved)}"
     for entry in saved:
         labels = [c["label"] for c in entry["containers"]]
