@@ -35,14 +35,15 @@ class CheckContext:
 
 def chk_bounds(cand: Candidate, ctx: CheckContext):
     c = cand.container
-    L, W, H = c.inner_l, c.inner_w, c.inner_h
+    L, W = c.inner_l, c.inner_w
+    z_max = c.max_z
     if cand.x < -EPS or cand.y < -EPS or cand.z < -EPS:
         return "超出箱内范围"
     if cand.x + cand.dx > L + EPS:
         return "超出箱长"
     if cand.y + cand.dy > W + EPS:
         return "超出箱宽"
-    if cand.z + cand.dz > H + EPS:
+    if cand.z + cand.dz > z_max + EPS:
         return "超出箱高"
     return None
 
@@ -168,14 +169,15 @@ def _load_on_support(placed: list, p) -> float:
 def chk_max_stack_layers(cand: Candidate, ctx: CheckContext):
     """Enforce per-item max_stack layers and per-box load capacity.
 
-    Layer limit: the item's own max_stack (None = unlimited).
-    Load limit: the supporting box's max_load (None = unlimited). The load
-    already resting on each support's top face plus the new item's weight
-    must not exceed the capacity.
+    Layer limit: max_stack only applies when same_type_stack is True
+    (the user must opt in to stacking control).  0 / None = unlimited.
+    Load limit: the supporting box's max_load (0 = cannot be crushed;
+    None = unlimited).  The load already resting on each support's top
+    face plus the new item's weight must not exceed the capacity.
     """
     item = cand.item
     limit = item.max_stack
-    if limit is not None:
+    if item.same_type_stack and limit not in (None, 0):
         depth = _stack_depth(ctx.placed, cand.x, cand.y, cand.dx, cand.dy)
         if depth + 1 > limit:
             return f"超过最大堆码层数（上限 {limit} 层）"
@@ -187,11 +189,18 @@ def chk_max_stack_layers(cand: Candidate, ctx: CheckContext):
             if cap is None:
                 continue
             load = _load_on_support(ctx.placed, p) + cand.item.gross
+            if cap == 0:
+                if cand.item.gross > EPS:
+                    worst = (p, 1e9, cap)
+                    break
+                continue
             if load > cap + EPS:
                 if worst is None or load - cap > worst[1]:
                     worst = (p, load - cap, cap)
         if worst:
             cap = worst[2]
+            if cap == 0:
+                return "被压货物不可承压（max_load=0）"
             return f"被压货物承重超限（{cap:.0f} kg）"
     return None
 
@@ -203,13 +212,6 @@ def chk_weight_order(cand: Candidate, ctx: CheckContext):
     for p in rests_on(ctx.placed, cand):
         if cand.item.gross < p.item.gross - EPS:
             return "轻重堆叠约束不满足"
-    return None
-
-
-def chk_crush(cand: Candidate, ctx: CheckContext):
-    for p in supports(ctx.placed, cand):
-        if p.item.crush_sensitive:
-            return "易压约束不满足"
     return None
 
 
@@ -264,6 +266,38 @@ def chk_inside_out(cand: Candidate, ctx: CheckContext):
     return None
 
 
+def _fork_reachable(cand: Candidate, placed: list) -> bool:
+    """Check whether the forklift can reach *cand* without crossing a
+    placed box that rises above the forklift's working height in the
+    same y-band.
+
+    The forklift drives in from the door (x = 0) along the x-axis at
+    height z = cand.z .. cand.z + cand.dz.  A placed box q blocks the
+    path when its y-band overlaps the target's, its top rises above the
+    forklift's bottom (q.z + q.dz > cand.z), and the forklift must cross
+    q's x-span to reach the target (q.x < cand.x + cand.dx and
+    cand.x < q.x + q.dx).
+    """
+    from packing_engine.geometry import EPS
+
+    for q in placed:
+        if q is cand:
+            continue
+        if not (q.x < cand.x + cand.dx - EPS and cand.x < q.x + q.dx - EPS):
+            continue
+        if not (q.y < cand.y + cand.dy - EPS and cand.y < q.y + q.dy - EPS):
+            continue
+        if q.z + q.dz > cand.z + EPS:
+            return False
+    return True
+
+
+def chk_fork_reachable(cand: Candidate, ctx: CheckContext):
+    if not _fork_reachable(cand, ctx.placed):
+        return "叉车进入路径被阻挡"
+    return None
+
+
 CHECKERS = {
     "bounds": chk_bounds,
     "collision": chk_collision,
@@ -271,12 +305,12 @@ CHECKERS = {
     "stack_support": chk_stack_support,
     "max_stack_layers": chk_max_stack_layers,
     "weight_order": chk_weight_order,
-    "crush": chk_crush,
     "same_type_stack": chk_same_type_stack,
     "fork_tine": chk_fork_tine,
     "manual_limit": chk_manual_limit,
     "pn_continuous": chk_pn_continuous,
     "inside_out": chk_inside_out,
+    "fork_reachable": chk_fork_reachable,
 }
 
 
@@ -287,10 +321,11 @@ def run_checkers(
 ) -> list[tuple[str, str]]:
     """Return [(rule, reason)] for enabled rules that fail.
 
-    The hard rules (bounds/collision/payload) are always enforced regardless
-    of the enabled list; the business rules follow the enabled list.
+    The hard rules (bounds/collision/payload/stack_support/fork_reachable)
+    are always enforced regardless of the enabled list; the business rules
+    follow the enabled list.
     """
-    hard = ["bounds", "collision", "payload", "stack_support"]
+    hard = ["bounds", "collision", "payload", "stack_support", "fork_reachable"]
     if enabled_rules is None:
         soft = [r for r in CHECKERS if r not in hard]
     else:

@@ -238,7 +238,15 @@ async function selectPlan(p: Plan) {
 async function startCompute() {
   if (!task.value) return;
   error.value = "";
+  const hasPlans = plans.value.length > 0;
   try {
+    if (hasPlans) {
+      await Tasks.clearRuns(task.value.id);
+      plans.value = [];
+      selectedPlan.value = null;
+      placements.value = [];
+      selected.value = null;
+    }
     const job = await Tasks.compute(task.value.id, { algorithms: algos.value });
     jobId.value = job.id;
     showJob.value = true;
@@ -375,8 +383,8 @@ onMounted(loadTask);
           <router-link :to="nextConfig.to" class="next-btn">继续配置</router-link>
         </template>
         <template v-else>
-          <span>配置已完成，可以开始计算。</span>
-          <a href="#compute" class="next-btn">开始计算</a>
+          <span>配置已完成，{{ plans.length ? "可重新计算。" : "可以开始计算。" }}</span>
+          <a href="#compute" class="next-btn">{{ plans.length ? "重新计算" : "开始计算" }}</a>
         </template>
       </div>
     </section>
@@ -431,7 +439,7 @@ onMounted(loadTask);
       <div class="compute-bar">
         <p v-if="canCompute.length" class="hint">{{ canCompute.join(" · ") }}</p>
         <button class="primary" @click="startCompute" :disabled="canCompute.length > 0 || showJob">
-          开始计算
+          {{ plans.length ? "重新计算" : "开始计算" }}
         </button>
       </div>
     </section>
@@ -554,7 +562,7 @@ onMounted(loadTask);
     </section>
 
     <div v-if="!plans.length && !showJob" class="empty">
-      暂无方案。完成配置后点击「开始计算」。
+      暂无方案。完成配置后点击「{{ plans.length ? "重新计算" : "开始计算" }}」。
     </div>
   </div>
 

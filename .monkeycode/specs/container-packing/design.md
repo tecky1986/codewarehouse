@@ -1,8 +1,8 @@
 # 集装箱装箱工具 技术设计（design.md）
 
 Feature Name: container-packing
-Updated: 2026-10-22
-对应需求：当前工作区 `.monkeycode/specs/container-packing/requirements.md`（R1–R31）
+Updated: 2026-10-28
+对应需求：当前工作区 `.monkeycode/specs/container-packing/requirements.md`（R1–R33）
 对应 PRD：当前工作区 `.monkeycode/specs/container-packing/PRD.md`（v1.1）
 
 ---
@@ -50,16 +50,18 @@ flowchart TB
 | POST /api/container-types/import；GET /api/container-types/export | 箱型 Excel 导入导出 | R21 |
 | GET/POST /api/packages，PUT/DELETE /api/packages/{id} | 包装主数据 CRUD | R22 |
 | POST /api/tasks；GET /api/tasks；GET/PUT/DELETE /api/tasks/{id} | 任务 CRUD | R7 |
-| POST /api/tasks/{id}/import | 上传 xlsx，返回导入预览（含逐行错误、缺失 PN 清单） | R1/R25 |
+| POST /api/tasks/{id}/import | 上传 xlsx，返回导入预览（含逐行错误、缺失/未匹配清单） | R1/R25 |
 | POST /api/tasks/{id}/import/batch-maintain | 上传待填表，写入包装主数据 | R25 |
+| POST /api/tasks/{id}/import/supplement | body: [{pn, name, l, w, h, tare, net, gross}]，JSON 批量 upsert 主数据后自动 re-match，返回最新 preview | R32 |
 | POST /api/tasks/{id}/import/re-match | 重新按 PN→PackMatls 补全 | R25 |
 | GET/PUT /api/tasks/{id}/site-groups | Site 分组确认（同柜/分离勾选） | R26 |
-| POST /api/tasks/{id}/compute | body: {mode, container_spec, algorithms[], overrides} → {jobId} | R2/R16/R19 |
+| POST /api/tasks/{id}/compute | body: {mode, container_spec, algorithms[], overrides} → {jobId} | R2/R16/R19/R33 |
 | GET /api/jobs/{jobId} | {status, algorithms:[{name, progress, eta_seconds, done_ms, timed_out}], overall_eta} | R31 |
 | GET /api/tasks/{id}/plans；PUT /api/tasks/{id}/adopted | 方案列表（含 KPI）、指定采用方案 | R15/R16 |
 | GET /api/plans/{planId}/placements | 逐箱逐件摆放结果（前端 3D 数据源） | R6/R29 |
 | GET /api/tasks/{id}/export?plan_id&template_id | 回写导出 xlsx | R4/R27/R28 |
 | GET/POST/PUT/DELETE /api/export-templates | 导出模板 CRUD；默认模板禁删 | R5 |
+| DELETE /api/tasks/{id}/runs | 清空当前任务全部 runs 的方案与采用态（重新计算前置） | R33 |
 | GET/PUT /api/settings | 全局参数（人工上限/铲齿/时限/间隙） | R9/R18 |
 
 ### 3.2 计算内核 packing_engine 模块
@@ -81,7 +83,8 @@ packing_engine/
 
 | 组件 | 要点 |
 |------|------|
-| ImportPreview | 逐行状态、错误定位、缺失 PN 汇总、批量维护入口 |
+| ImportPreview | 逐行状态、错误定位、缺失 PN 汇总、未匹配主数据勾选+批量编辑+一键写入（R32）、批量维护入口 |
+| TaskDetail | 计算按钮按是否有历史方案在「开始计算/重新计算」间切换；重新计算前调 DELETE /runs 清空（R33） |
 | SiteConfirm | 站点卡片列表、同柜/分离勾选、互斥校验提示 |
 | KpiCompare | 多算法对照表、列排序、采用方案单选 |
 | View3D | 箱列表/页签、选中居中、0.5–4× 回放、点选高亮（R29） |
@@ -92,10 +95,10 @@ packing_engine/
 
 ```sql
 container_type(id PK, code UNIQUE, name, iso_code, inner_l, inner_w, inner_h,
-               door_w, door_h, max_payload, tare_weight, volume, enabled, remark)
+                door_w, door_h, max_payload, tare_weight, volume, enabled, remark)
 package_master(id PK, pn UNIQUE NULL, code, name, package_type, cargo_type,
-               l, w, h, tare, net, gross, volume, rotatable, crush_sensitive,
-               same_type_stack, default_loading, max_stack, enabled, remark)
+                l, w, h, tare, net, gross, volume, rotatable, same_type_stack,
+                default_loading, max_stack, max_load, enabled, remark)
 task(id PK, name, created_at, params_json, rules_json, site_groups_json,
      container_mode_json, status, adopted_plan_id, last_ok_plan_id)
 import_row(id PK, task_id FK, row_no, a_no, b_len, c_wid, d_hgt, e_cbm,
@@ -140,7 +143,7 @@ def compute(task, algorithms, deadline_s):
 | collision | 与同箱已放件 AABB 两两相交检测（网格加速可后置） |
 | payload | Σ毛重 + 本件 ≤ max_payload |
 | weight_order | 直接支撑面上所有下件单件毛重 ≥ 本件（R10） |
-| crush | 本件为易压时允许；本件上方存在任何件则违规（R11） |
+| crush | 支撑件 max_load=0 时禁止顶部堆压；max_load>0 时按承压上限校验被压件重量（R11） |
 | same_type_stack | 本件或正下件标记 same_type_stack 时，货物类型必须相同（R12） |
 | fork_tine | loading=叉车：进叉轴边长 ≤ 铲齿长度（R18）；进叉轴默认箱长方向 |
 | manual_limit | 重量 > 上限（默认 30kg）强制叉车（R9） |
@@ -214,7 +217,8 @@ N 列 = container_instance.label；新增「装箱顺序」列 = load_seq（每�
 
 | 场景 | 行为 | 码 |
 |------|------|----|
-| 导入行缺规格且 PN/PackMatls 不命中 | 预览标红 + 缺失清单，compute 拒绝 | E_IMPORT_INCOMPLETE |
+| 导入行缺规格且 PN/PackMatls 不命中 | 预览标红 + 缺失/未匹配清单，compute 拒绝 | E_IMPORT_INCOMPLETE / E_NO_MASTER_MATCH |
+| supplement 批量写入时任一关键规格（长/宽/高）为空或非正 | 拒绝整批写入，前端逐字段标红 | E_VALIDATION |
 | 文件编码异常 | 按 UTF-8/BOM/GBK 依次探测，全失败则报「无法识别编码」 | E_ENCODING |
 | 计算超时 | 单算法返回部分方案 + timed_out 标记（R31） | W_TIMEOUT |
 | 自由组合锁定无解 | 终止并返回「锁定条件无可行解」 | E_NO_FEASIBLE |
@@ -230,7 +234,7 @@ N 列 = container_instance.label；新增「装箱顺序」列 = load_seq（每�
 | R7 任务 | 任务持久化 round-trip | 重开任务数据一致 |
 | R8 PN 连续 | pn_continuous 校验器、链排序 | 场景 5 |
 | R9/R18 | manual_limit、fork_tine 边界（=1220、1221） | 场景 7 |
-| R10–R12 | weight_order/crush/same_type 真值表 | 场景 6 |
+| R10–R12 | weight_order/crush/same_type 真值表（crush 按 max_load=0 判定） | 场景 6 |
 | R13/R26 | Site 分组构建、互斥校验 | 场景 3/4 |
 | R14 | 优先级排序与降级记录 | 场景 6 |
 | R15/R30 | kpi 公式逐项 + P3 复算对账 | 场景 16 |
@@ -243,6 +247,8 @@ N 列 = container_instance.label；新增「装箱顺序」列 = load_seq（每�
 | R27/R28 | 回写 diff（P10）、utf-8-sig、RFC5987 文件名 | 场景 1/14 |
 | R29 | （前端 E2E：每箱渲染、居中、倍速） | 场景 15 |
 | R31 | ProgressReporter eta 单调性 | 场景 17 |
+| R32 | supplement 批量 upsert + 自动 re-match、重复 PN 更新而非新建、未填规格拦截 | 场景 18 |
+| R33 | 重新计算前清空 runs 保留配置、无方案时不清空 | 场景 19 |
 | P1/P9 等 | 随机方案性质测试（hypothesis 风格） | 每次回归 |
 
 回归基线：业务样表 Step3Output-1.xlsx；金样本 = 手工验算过最优解的小算例（≤10 件）。

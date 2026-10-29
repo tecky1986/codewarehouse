@@ -10,7 +10,7 @@ from packing_engine.rules import CheckContext, run_checkers
 from packing_engine import Candidate
 
 
-def _item(uid, l, w, h, gross, pn=None, crush=False, same_stack=False, loading="manual", cargo="A", rotatable=True):
+def _item(uid, l, w, h, gross, pn=None, same_stack=False, loading="manual", cargo="A", rotatable=True, max_load=0.0):
     return CargoItem(
         uid=uid,
         pn=pn,
@@ -22,9 +22,9 @@ def _item(uid, l, w, h, gross, pn=None, crush=False, same_stack=False, loading="
         gross=gross,
         net=gross,
         rotatable=rotatable,
-        crush_sensitive=crush,
         same_type_stack=same_stack,
         loading=loading,
+        max_load=max_load,
     )
 
 
@@ -190,8 +190,8 @@ def test_load_seq_starts_from_innermost_lowest_width_side():
     seq = {p.item.uid: p.load_seq for p in box.placed}
     assert seq["inner"] == 1
     assert seq["side"] == 2
-    assert seq["top"] == 3
-    assert seq["door"] == 4
+    assert seq["door"] == 3
+    assert seq["top"] == 4
 
 
 def test_dblf_fills_width_row_before_top():
@@ -245,6 +245,32 @@ def test_wall_build_fills_width_row_before_top():
     assert by_uid["top"].dy == 2000
 
 
+def test_wall_fill_dense_floors():
+    box = ContainerInstance(
+        type_code="40GP",
+        seq_no=1,
+        label="40GP-1",
+        inner_l=12192,
+        inner_w=2352,
+        inner_h=2280,
+        max_payload=26000,
+        volume_m3=12192 * 2352 * 2280 / 1e9,
+    )
+    items = [
+        _item("A1", 1460, 1150, 1100, 400, cargo="A", rotatable=False),
+        _item("A2", 1460, 1150, 1100, 300, cargo="A", rotatable=False),
+        _item("B1", 770, 770, 850, 60, cargo="B", rotatable=False),
+        _item("B2", 770, 770, 850, 50, cargo="B", rotatable=False),
+    ]
+    rep = ProgressReporter(total=len(items), deadline_s=5)
+    plan = ALGORITHMS["wall_fill"](items, [box], {"time_limit_s": 5}, [], [], rep)
+    assert plan.unassigned == []
+    assert len(box.placed) == 4
+    by_uid = {p.item.uid: p for p in box.placed}
+    assert by_uid["A1"].z == 0, f"first type-A item must sit on the floor, got z={by_uid['A1'].z}"
+    assert by_uid["A2"].z == 0, f"second type-A item must sit on the floor, got z={by_uid['A2'].z}"
+
+
 def test_timeout_marks_partial_plan():
     box = _box()
     items = [_item(f"i{i}", 500, 500, 500, 10) for i in range(50)]
@@ -259,13 +285,13 @@ def test_timeout_marks_partial_plan():
 def test_max_stack_layers_rule_item_limit():
     box = _box()
     it1 = CargoItem(uid="b", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
-                    gross=10, net=10, max_stack=2, rotatable=False)
+                    gross=10, net=10, max_stack=2, rotatable=False, same_type_stack=True)
     it2 = CargoItem(uid="t", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
-                    gross=10, net=10, max_stack=2, rotatable=False)
+                    gross=10, net=10, max_stack=2, rotatable=False, same_type_stack=True)
     ctx = CheckContext(settings={}, placed=[
         Candidate(item=it1, container=box, x=0, y=0, z=0, dx=1000, dy=1000, dz=500, load_seq=1),
         Candidate(item=CargoItem(uid="b2", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
-                                  gross=10, net=10, max_stack=2, rotatable=False),
+                                  gross=10, net=10, max_stack=2, rotatable=False, same_type_stack=True),
                   container=box, x=0, y=0, z=500, dx=1000, dy=1000, dz=500, load_seq=2),
     ])
     cand = Candidate(item=it2, container=box, x=0, y=0, z=1000, dx=1000, dy=1000, dz=500, load_seq=3)
@@ -279,13 +305,13 @@ def test_max_stack_layers_rule_container_limit():
     # candidate item's own max_stack. The candidate here has max_stack=2,
     # and is being placed at z=1000 (3rd layer), so it violates the limit.
     it = CargoItem(uid="t", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
-                   gross=10, net=10, rotatable=False, max_stack=2)
+                   gross=10, net=10, rotatable=False, max_stack=2, same_type_stack=True)
     ctx = CheckContext(settings={}, placed=[
         Candidate(item=CargoItem(uid="b", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
-                                  gross=10, net=10, rotatable=False, max_stack=2),
+                                  gross=10, net=10, rotatable=False, max_stack=2, same_type_stack=True),
                    container=box, x=0, y=0, z=0, dx=1000, dy=1000, dz=500, load_seq=1),
         Candidate(item=CargoItem(uid="b2", pn=None, packmatls=None, cargo_type="A", l=1000, w=1000, h=500,
-                                  gross=10, net=10, rotatable=False, max_stack=2),
+                                  gross=10, net=10, rotatable=False, max_stack=2, same_type_stack=True),
                    container=box, x=0, y=0, z=500, dx=1000, dy=1000, dz=500, load_seq=2),
     ])
     cand = Candidate(item=it, container=box, x=0, y=0, z=1000, dx=1000, dy=1000, dz=500, load_seq=3)
@@ -397,7 +423,7 @@ def test_normalize_pn_wildcard_match():
 
     # items_from_rows picks up rule attributes from wildcard master
     packages = [
-        {"pn": "ACW?1", "name": "WILD", "rotatable": 0, "crush_sensitive": 1,
+        {"pn": "ACW?1", "name": "WILD", "rotatable": 0,
          "same_type_stack": 1, "max_stack": 3, "default_loading": "forklift"},
     ]
     rows = [{"id": 1, "row_no": 1, "k_pn": "ACW1081", "g_packmatls": None,
@@ -407,7 +433,6 @@ def test_normalize_pn_wildcard_match():
     assert len(items) == 1
     it = items[0]
     assert it.rotatable is False
-    assert it.crush_sensitive is True
     assert it.same_type_stack is True
     assert it.max_stack == 3
     assert it.loading == "forklift"

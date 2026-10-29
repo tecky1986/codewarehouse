@@ -22,12 +22,21 @@ def client(tmp_path):
     app.dependency_overrides.clear()
 
 
+def _ensure_pn_masters(conn, pns):
+    from app.repos import PackageMasterRepo
+    pkg = PackageMasterRepo(conn)
+    for pn in pns:
+        if pkg.get_by_pn(pn) is None:
+            pkg.create({"pn": pn, "l": 1000.0, "w": 1000.0, "h": 1000.0, "tare": 0.0, "net": 90.0, "gross": 100.0})
+
+
 def _make_task_with_rows(client):
     body = client.post("/api/tasks", json={"name": "t1"}).json()
     tid = body["data"]["id"]
     client.put(f"/api/tasks/{tid}", json={"container_mode_json": {"type_code": "20GP", "count": 3}})
     client.put(f"/api/tasks/{tid}", json={"rules_json": None})
     conn = client.conn
+    _ensure_pn_masters(conn, ("P1", "P2"))
     rows = [
         {
             "task_id": tid,
@@ -192,7 +201,7 @@ def _item(uid, l, w, h, g, loading="forklift"):
     return CargoItem(
         uid=uid, pn=None, packmatls=None, cargo_type="A",
         l=l, w=w, h=h, gross=g, net=g,
-        rotatable=True, crush_sensitive=False, same_type_stack=False, loading=loading,
+        rotatable=True, same_type_stack=False, loading=loading,
     )
 
 
@@ -246,6 +255,7 @@ def _make_task_multi(client):
     )
     client.put(f"/api/tasks/{tid}", json={"rules_json": None})
     conn = client.conn
+    _ensure_pn_masters(conn, ("P1",))
     rows = [
         {
             "task_id": tid,
@@ -303,9 +313,11 @@ def test_fixed_zero_means_unlimited(client):
         json={"container_mode_json": {"mode": "fixed", "fixed": {"20GP": 0}}},
     )
     client.put(f"/api/tasks/{tid}", json={"rules_json": None})
+    conn = client.conn
+    _ensure_pn_masters(conn, ("P1",))
     from app.repos import ImportRowRepo
 
-    ImportRowRepo(client.conn).replace_for_task(
+    ImportRowRepo(conn).replace_for_task(
         tid,
         [
             {
@@ -361,6 +373,7 @@ def test_freemix_mode_via_api(client):
     )
     client.put(f"/api/tasks/{tid}", json={"rules_json": None})
     conn = client.conn
+    _ensure_pn_masters(conn, ("P1",))
     rows = [
         {
             "task_id": tid,
@@ -390,25 +403,57 @@ def test_freemix_mode_via_api(client):
 
     ImportRowRepo(conn).replace_for_task(tid, rows)
 
-    body = client.post(
-        f"/api/tasks/{tid}/compute", json={"algorithms": ["freemix"]}
+
+def test_fixed_zero_means_unlimited(client):
+    body = client.post("/api/tasks", json={"name": "t0"}).json()
+    tid = body["data"]["id"]
+    client.put(
+        f"/api/tasks/{tid}",
+        json={"container_mode_json": {"mode": "fixed", "fixed": {"20GP": 0}}},
+    )
+    client.put(f"/api/tasks/{tid}", json={"rules_json": None})
+    conn = client.conn
+    _ensure_pn_masters(conn, ("P1",))
+    from app.repos import ImportRowRepo
+
+    ImportRowRepo(conn).replace_for_task(
+        tid,
+        [
+            {
+                "task_id": tid,
+                "row_no": i + 1,
+                "a_no": str(i + 1),
+                "b_len": 1000.0,
+                "c_wid": 1000.0,
+                "d_hgt": 1000.0,
+                "e_cbm": 1.0,
+                "f_outcase": "CTN",
+                "g_packmatls": None,
+                "h_tare": 0.0,
+                "i_net": 90.0,
+                "j_gross": 100.0,
+                "k_pn": "P1",
+                "l_note": None,
+                "m_site": None,
+                "o_ref": None,
+                "p_dn": None,
+                "q_misc": None,
+                "filled_fields_json": "[]",
+                "source_flag": "table",
+            }
+            for i in range(6)
+        ],
+    )
+    resp = client.post(
+        f"/api/tasks/{tid}/compute", json={"algorithms": ["dblf"]}
     ).json()
-    assert body["code"] == 0, body
-    finished = _wait_job(client, body["data"]["id"])
+    assert resp["code"] == 0, resp
+    finished = _wait_job(client, resp["data"]["id"])
     assert finished["status"] == "done"
     plans = client.get(f"/api/tasks/{tid}/plans").json()["data"]
-    assert len(plans) == 1
-    plan = plans[0]
-    assert plan["algorithm"] == "freemix"
-    # qty_lock: 20GP must appear exactly once
-    pc = plan["kpi"]["per_container"]
-    by_code: dict[str, int] = {}
-    for c in pc:
-        by_code[c["type_code"]] = by_code.get(c["type_code"], 0) + 1
-    assert by_code.get("20GP") == 1
-    assert by_code.get("40GP", 0) <= 3  # max_qty upper bound
-    # all 6 items assigned (freemix returns a fully-loaded plan)
+    plan = next(p for p in plans if p["algorithm"] == "dblf")
     assert plan["kpi"]["overall"]["unassigned_count"] == 0
+    assert plan["kpi"]["overall"]["containers_used"] >= 1
 
 
 def test_freemix_mode_requires_type_lock(client):

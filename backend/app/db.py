@@ -36,11 +36,11 @@ CREATE TABLE IF NOT EXISTS package_master (
     gross REAL,
     volume REAL,
     rotatable INTEGER DEFAULT 1,
-    crush_sensitive INTEGER DEFAULT 0,
     same_type_stack INTEGER DEFAULT 0,
     default_loading TEXT,
     max_stack INTEGER,
     max_load REAL,
+    composite_of TEXT,
     enabled INTEGER NOT NULL DEFAULT 1,
     remark TEXT
 );
@@ -166,4 +166,6 @@ def init_schema(conn: sqlite3.Connection) -> None:
     pkg_cols = {row["name"] for row in conn.execute("PRAGMA table_info(package_master)").fetchall()}
     if "max_load" not in pkg_cols:
         conn.execute("ALTER TABLE package_master ADD COLUMN max_load REAL")
+    if "composite_of" not in pkg_cols:
+        conn.execute("ALTER TABLE package_master ADD COLUMN composite_of TEXT")
     conn.commit()

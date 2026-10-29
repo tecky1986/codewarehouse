@@ -1,4 +1,5 @@
 from itertools import product
+from typing import Callable
 
 from packing_engine.kpi import evaluate
 from packing_engine.model import ContainerInstance, Plan
@@ -104,13 +105,19 @@ def search(
     enabled_rules: list,
     site_groups: list,
     reporter: ProgressReporter,
+    placement_fn: Callable | None = None,
 ) -> tuple[Plan | None, str | None, bool]:
     """Return (best_plan, error, timed_out).
 
     Optimization objective: minimize total freight cost among plans that
     place all items (completion == 1.0).  If no plan places everything,
     fall back to maximising completion, then minimising container count.
+
+    When *placement_fn* is given it replaces the default `dblf` for the
+    per-combo placement step, so the combo search can be paired with any
+    registered algorithm.
     """
+    placement_fn = placement_fn or dblf
     catalog_codes = list(catalog.keys())
     lb = lower_bound(items, catalog)
     upper = min(lb + 3, 20)
@@ -128,7 +135,7 @@ def search(
             total=len(items),
             deadline_s=reporter.remaining() if reporter.remaining() > 0 else float(settings.get("time_limit_s", 60)) / max(len(combos), 1),
         )
-        plan = dblf(items, containers, settings, enabled_rules, site_groups, sub_rep)
+        plan = placement_fn(items, containers, settings, enabled_rules, site_groups, sub_rep)
         plan.kpi = evaluate(plan, len(items))
         overall = plan.kpi["overall"]
         completion = overall["completion"]

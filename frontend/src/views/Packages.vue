@@ -22,11 +22,10 @@ const emptyForm = () => ({
   net: 0,
   gross: 0,
   rotatable: 1,
-  crush_sensitive: 0,
   same_type_stack: 0,
   default_loading: "人工",
   max_stack: 0,
-  max_load: null as number | null,
+  max_load: 0 as number,
   enabled: 1,
 });
 
@@ -61,11 +60,10 @@ function startEdit(p: PackageMaster) {
     net: p.net ?? 0,
     gross: p.gross ?? 0,
     rotatable: p.rotatable ?? 1,
-    crush_sensitive: p.crush_sensitive ?? 0,
     same_type_stack: p.same_type_stack ?? 0,
     default_loading: p.default_loading || "人工",
     max_stack: p.max_stack ?? 0,
-    max_load: p.max_load ?? null,
+    max_load: p.max_load ?? 0,
     enabled: p.enabled ?? 1,
   };
   showForm.value = true;
@@ -165,8 +163,7 @@ onMounted(load);
         <label>箱重kg <input type="number" step="0.1" v-model.number="form.tare" /></label>
         <label>净重kg <input type="number" step="0.1" v-model.number="form.net" /></label>
         <label>毛重kg <input type="number" step="0.1" v-model.number="form.gross" /></label>
-        <label class="ck">可旋转 <input type="checkbox" v-model="form.rotatable" :true-value="1" :false-value="0" /></label>
-        <label class="ck">易压 <input type="checkbox" v-model="form.crush_sensitive" :true-value="1" :false-value="0" /></label>
+        <label class="ck">四面进铲 <input type="checkbox" v-model="form.rotatable" :true-value="1" :false-value="0" /></label>
         <label class="ck">同种堆叠 <input type="checkbox" v-model="form.same_type_stack" :true-value="1" :false-value="0" /></label>
         <label>默认装卸
           <select v-model="form.default_loading">
@@ -174,8 +171,8 @@ onMounted(load);
             <option>叉车</option>
           </select>
         </label>
-        <label>最大堆码层数 <input type="number" v-model.number="form.max_stack" /></label>
-        <label>每箱承重量kg <input type="number" step="0.1" v-model.number="form.max_load" placeholder="留空=不限" /></label>
+        <label v-if="form.same_type_stack === 1">最大堆码层数 <input type="number" v-model.number="form.max_stack" /></label>
+        <label>每箱承重量kg <input type="number" step="0.1" v-model.number="form.max_load" :required="true" :min="0" placeholder="0=不可被压；留空=不限" /></label>
         <label class="ck">启用 <input type="checkbox" v-model="form.enabled" :true-value="1" :false-value="0" /></label>
       </div>
       <div class="form-actions">
@@ -207,10 +204,11 @@ onMounted(load);
             <td>{{ p.net }}</td>
             <td>{{ p.gross }}</td>
             <td class="attrs">
-              <span v-if="p.crush_sensitive">易压</span>
               <span v-if="p.same_type_stack">同种堆叠</span>
-              <span v-if="!p.rotatable">{{ p.rotatable === 0 ? "不可旋转" : "可旋转" }}</span>
+              <span v-if="p.rotatable === 0">仅长边进铲</span>
+              <span v-else>四面进铲</span>
               <span>{{ p.default_loading }}</span>
+              <span v-if="p.max_load === 0">不可被压</span>
             </td>
             <td class="ops">
               <button @click="startEdit(p)">编辑</button>

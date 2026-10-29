@@ -15,12 +15,11 @@ class CargoItem:
     net: float = 0.0
     gross: float = 0.0
     volume: Optional[float] = None  # m3, fallback l*w*h/1e9
-    rotatable: bool = True
-    crush_sensitive: bool = False
+    rotatable: bool = True  # 四面进铲：True = 长边/宽边均可进铲；False = 仅长边正面进铲
     same_type_stack: bool = False
     loading: str = "manual"  # manual | forklift (effective after normalize)
-    max_stack: Optional[int] = None
-    max_load: Optional[float] = None  # per-box top face load capacity (kg); None = unlimited
+    max_stack: Optional[int] = None  # 仅 same_type_stack 为 True 时生效
+    max_load: Optional[float] = None  # 每箱顶面承重 kg；0 = 不可被压；None = 不限
     site: Optional[str] = None
     outcase: Optional[str] = None
     row_no: Optional[int] = None
@@ -58,6 +57,13 @@ class ContainerInstance:
     @property
     def used_payload(self) -> float:
         return sum(p.item.gross for p in self.placed)
+
+    @property
+    def max_z(self) -> float:
+        """Effective z ceiling: min(inner_h, door_h) when door_h is set."""
+        if self.door_h is not None and self.door_h < self.inner_h:
+            return float(self.door_h)
+        return float(self.inner_h)
 
     @property
     def remaining_volume(self) -> float:

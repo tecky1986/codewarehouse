@@ -254,7 +254,6 @@ class PackageMasterRepo:
             "gross",
             "volume",
             "rotatable",
-            "crush_sensitive",
             "same_type_stack",
             "default_loading",
             "max_stack",
@@ -267,6 +266,8 @@ class PackageMasterRepo:
             values[cols.index("enabled")] = 1
         if values[cols.index("rotatable")] is None:
             values[cols.index("rotatable")] = 1
+        if "max_load" not in data:
+            values[cols.index("max_load")] = 0.0
         cur = self.conn.execute(
             f"INSERT INTO package_master ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
             values,
@@ -294,7 +295,6 @@ class PackageMasterRepo:
             "gross",
             "volume",
             "rotatable",
-            "crush_sensitive",
             "same_type_stack",
             "default_loading",
             "max_stack",
@@ -303,6 +303,8 @@ class PackageMasterRepo:
             "remark",
         ]
         merged = {k: data[k] if k in data else existing[k] for k in fields}
+        if "max_load" not in data and merged.get("max_load") is None:
+            merged["max_load"] = 0.0
         self.conn.execute(
             f"UPDATE package_master SET {', '.join(k + '=?' for k in fields)} WHERE id=?",
             [merged[k] for k in fields] + [pid],
@@ -420,6 +422,14 @@ class ImportRowRepo:
         return items
 
     def replace_for_task(self, task_id: int, rows: list[dict]) -> list[dict]:
+        # placements reference import_row via import_row_id (NO ACTION FK).
+        # Drop this task's placements first; they are regenerated on the
+        # next compute and must not block the re-import of import rows.
+        self.conn.execute(
+            "DELETE FROM placement WHERE import_row_id IN "
+            "(SELECT id FROM import_row WHERE task_id = ?)",
+            (task_id,),
+        )
         self.conn.execute("DELETE FROM import_row WHERE task_id = ?", (task_id,))
         cols = (
             "task_id",

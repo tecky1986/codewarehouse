@@ -77,6 +77,11 @@ export const Tasks = {
   },
   reMatch: (id: number) =>
     req<ImportPreview>(`/api/tasks/${id}/import/re-match`, { method: "POST" }),
+  supplement: (id: number, items: Array<Record<string, unknown>>) =>
+    req<ImportPreview>(`/api/tasks/${id}/import/supplement`, {
+      method: "POST",
+      body: JSON.stringify(items),
+    }),
   siteGroups: (id: number) => req<SiteGroup[]>(`/api/tasks/${id}/site-groups`),
   saveSiteGroups: (id: number, groups: SiteGroup[]) =>
     req<SiteGroup[]>(`/api/tasks/${id}/site-groups`, {
@@ -239,7 +244,30 @@ export interface ImportRow {
 
 export interface ImportPreview {
   rows: ImportRow[];
-  missing: Array<{ pn: string | null; packmatls: string | null; row_no: number | null }>;
+  missing: Array<{
+    pn: string | null;
+    packmatls: string | null;
+    row_no: number | null;
+    b_len?: number | null;
+    c_wid?: number | null;
+    d_hgt?: number | null;
+    e_cbm?: number | null;
+    h_tare?: number | null;
+    i_net?: number | null;
+    j_gross?: number | null;
+  }>;
+  unmatched?: Array<{
+    pn: string | null;
+    packmatls: string | null;
+    row_no: number | null;
+    b_len?: number | null;
+    c_wid?: number | null;
+    d_hgt?: number | null;
+    e_cbm?: number | null;
+    h_tare?: number | null;
+    i_net?: number | null;
+    j_gross?: number | null;
+  }>;
   can_compute: boolean;
   row_count: number;
   distinct_sites?: string[];
@@ -358,7 +386,6 @@ export interface PackageMaster {
   net?: number | null;
   gross?: number | null;
   rotatable?: number;
-  crush_sensitive?: number;
   same_type_stack?: number;
   default_loading?: string | null;
   max_stack?: number | null;

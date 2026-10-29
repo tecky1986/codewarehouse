@@ -1,18 +1,14 @@
 [
   {
     "algorithm": "dblf",
-    "ok": false,
-    "error_codes": {
-      "E102": 1
-    },
+    "ok": true,
+    "error_codes": {},
     "containers": [
       {
         "label": "40GP-1",
-        "ok": false,
+        "ok": true,
         "unload_ok": true,
-        "errors": {
-          "E102": 1
-        },
+        "errors": {},
         "steps": [
           {
             "seq": 1,
@@ -23,13 +19,8 @@
           {
             "seq": 2,
             "uid": "t",
-            "ok": false,
-            "errors": [
-              [
-                "E102",
-                "当前排（z=0, y=0）尚未完成"
-              ]
-            ]
+            "ok": true,
+            "errors": []
           },
           {
             "seq": 3,
@@ -88,18 +79,14 @@
   },
   {
     "algorithm": "maxspace",
-    "ok": false,
-    "error_codes": {
-      "E102": 1
-    },
+    "ok": true,
+    "error_codes": {},
     "containers": [
       {
         "label": "40GP-1",
-        "ok": false,
+        "ok": true,
         "unload_ok": true,
-        "errors": {
-          "E102": 1
-        },
+        "errors": {},
         "steps": [
           {
             "seq": 1,
@@ -110,13 +97,8 @@
           {
             "seq": 2,
             "uid": "t",
-            "ok": false,
-            "errors": [
-              [
-                "E102",
-                "当前排（z=0, y=0）尚未完成"
-              ]
-            ]
+            "ok": true,
+            "errors": []
           },
           {
             "seq": 3,
@@ -175,18 +157,14 @@
   },
   {
     "algorithm": "extreme_point",
-    "ok": false,
-    "error_codes": {
-      "E102": 1
-    },
+    "ok": true,
+    "error_codes": {},
     "containers": [
       {
         "label": "40GP-1",
-        "ok": false,
+        "ok": true,
         "unload_ok": true,
-        "errors": {
-          "E102": 1
-        },
+        "errors": {},
         "steps": [
           {
             "seq": 1,
@@ -197,13 +175,8 @@
           {
             "seq": 2,
             "uid": "t",
-            "ok": false,
-            "errors": [
-              [
-                "E102",
-                "当前排（z=0, y=0）尚未完成"
-              ]
-            ]
+            "ok": true,
+            "errors": []
           },
           {
             "seq": 3,

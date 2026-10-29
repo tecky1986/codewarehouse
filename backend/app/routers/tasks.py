@@ -139,6 +139,46 @@ def batch_maintain(
     return ok(saved)
 
 
+@router.post("/{tid}/import/supplement")
+def import_supplement(tid: int, items: list[dict] = Body(...), conn=Depends(get_conn)):
+    TaskRepo(conn).get(tid)
+    pkg = PackageMasterRepo(conn)
+    saved = []
+    for it in items:
+        l, w, h = it.get("l"), it.get("w"), it.get("h")
+        for key, val in (("l", l), ("w", w), ("h", h)):
+            if val is None:
+                raise AppError(
+                    "E_VALIDATION",
+                    f"第 {len(saved) + 1} 条 {key.upper()} 缺失，无法写入主数据",
+                    status=422,
+                )
+            if not isinstance(val, (int, float)) or val <= 0:
+                raise AppError(
+                    "E_VALIDATION",
+                    f"第 {len(saved) + 1} 条 {key.upper()} 必须为正数",
+                    status=422,
+                )
+        rec = {
+            "pn": it.get("pn") or None,
+            "name": it.get("name") or None,
+            "package_type": it.get("package_type") or it.get("name") or None,
+            "l": int(round(float(l) * 10)),
+            "w": int(round(float(w) * 10)),
+            "h": int(round(float(h) * 10)),
+            "tare": it.get("tare"),
+            "net": it.get("net"),
+            "gross": it.get("gross"),
+            "max_load": it.get("max_load"),
+            "rotatable": 1,
+            "default_loading": "forklift",
+        }
+        saved.append(pkg.upsert(rec))
+    rows = complete_rows(conn, ImportRowRepo(conn).list_by_task(tid))
+    ImportRowRepo(conn).replace_for_task(tid, rows)
+    return ok(preview_payload(rows))
+
+
 @router.post("/{tid}/import/re-match")
 def re_match(tid: int, conn=Depends(get_conn)):
     TaskRepo(conn).get(tid)

@@ -27,12 +27,13 @@ def _try_at_cap(
     enabled_rules,
 ) -> Candidate | None:
     load_seq = len(c.placed) + 1
+    z_max = c.max_z
     check_ctx = CheckContext(settings=settings, placed=c.placed)
     for (dx, dy, dz) in _orientations(item):
         x0 = cap - dx
         if x0 < -1e-9:
             continue
-        if dy > c.inner_w - y + 1e-9 or dz > c.inner_h - z + 1e-9:
+        if dy > c.inner_w - y + 1e-9 or dz > z_max - z + 1e-9:
             continue
         cand = Candidate(
             item=item,
@@ -64,9 +65,10 @@ def _advance_cursor(
 
     Within a row (y direction) the cap stays fixed.  When the row is full
     (y overflows inner_w) the cursor moves to the next z-row, keeping the
-    cap unchanged.  When z overflows inner_h the cap is pushed door-ward
-    by the layer's deepest item and z resets to 0.
+    cap unchanged.  When z overflows max_z (inner_h or door_h) the cap is
+    pushed door-ward by the layer's deepest item and z resets to 0.
     """
+    z_max = c.max_z
     new_y = cand.y + cand.dy
     new_row_max_dx = max(row_max_dx, cand.dx)
     new_row_max_dz = max(row_max_dz, cand.dz)
@@ -78,7 +80,7 @@ def _advance_cursor(
 
     # row full: move to next z-row, cap unchanged
     new_z = cand.z + new_row_max_dz
-    if new_z >= c.inner_h - 1e-9:
+    if new_z >= z_max - 1e-9:
         # z-layer full: push cap door-ward, reset z and y
         new_cap = cap - new_layer_max_dx
         if new_cap <= 1e-9:
@@ -182,7 +184,7 @@ def wall_build(
                     next_z = z + row_max_dz
                     if row_max_dz <= 0:
                         next_z = z + max(item.h, 1.0)
-                    if next_z + item.h <= c.inner_h + 1e-9:
+                    if next_z + item.h <= c.max_z + 1e-9:
                         cand = _try_at_cap(cap, 0.0, next_z, item, c, settings, enabled_rules)
                         if cand is not None:
                             cursors[id(c)] = _advance_cursor(
@@ -250,7 +252,7 @@ def guillotine(
                 target["y"] = cand.y + cand.dy
                 if target["y"] + cand.dy > c.inner_w - 1e-9:
                     target["y"] = 0.0
-                    target["z"] = cand.z + cand.dz
+                    target["z"] = cand.z + cand.dz if cand.z + cand.dz < c.max_z - 1e-9 else 0.0
                     target["cap"] = float(c.inner_l)
                 else:
                     target["cap"] = float(c.inner_l)

@@ -50,6 +50,12 @@ def _make_task_with_rows(client):
         json={"container_mode_json": {"type_code": "20GP", "count": 2}},
     )
     conn = client.conn
+    from app.repos import PackageMasterRepo
+    pkg = PackageMasterRepo(conn)
+    for i in range(1, 5):
+        pn = f"PN-{i}"
+        if pkg.get_by_pn(pn) is None:
+            pkg.create({"pn": pn, "l": 1000.0, "w": 800.0, "h": 600.0, "tare": 2.0, "net": 58.0, "gross": 60.0})
     rows = [
         {
             "task_id": tid,
