@@ -16,6 +16,7 @@ from packing_engine.place import (
     ALGORITHMS,
     dblf,
     maximal_space,
+    wall_fill,
 )
 import packing_engine.place2  # noqa: F401  (registers extra algorithms)
 from packing_engine.kpi import evaluate
@@ -35,5 +36,6 @@ __all__ = [
     "guillotine",
     "maximal_space",
     "wall_build",
+    "wall_fill",
     "evaluate",
 ]

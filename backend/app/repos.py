@@ -266,7 +266,7 @@ class PackageMasterRepo:
             values[cols.index("enabled")] = 1
         if values[cols.index("rotatable")] is None:
             values[cols.index("rotatable")] = 1
-        if values[cols.index("max_load")] is None:
+        if "max_load" not in data:
             values[cols.index("max_load")] = 0.0
         cur = self.conn.execute(
             f"INSERT INTO package_master ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",

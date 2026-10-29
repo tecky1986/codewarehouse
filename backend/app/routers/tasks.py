@@ -159,7 +159,18 @@ def import_supplement(tid: int, items: list[dict] = Body(...), conn=Depends(get_
                     f"第 {len(saved) + 1} 条 {key.upper()} 必须为正数",
                     status=422,
                 )
-        rec = {k: it.get(k) for k in ("pn", "name", "l", "w", "h", "tare", "net", "gross")}
+        rec = {
+            "pn": it.get("pn") or None,
+            "name": it.get("name") or None,
+            "package_type": it.get("package_type") or it.get("name") or None,
+            "l": int(round(float(l) * 10)),
+            "w": int(round(float(w) * 10)),
+            "h": int(round(float(h) * 10)),
+            "tare": it.get("tare"),
+            "net": it.get("net"),
+            "gross": it.get("gross"),
+            "max_load": it.get("max_load"),
+        }
         saved.append(pkg.upsert(rec))
     rows = complete_rows(conn, ImportRowRepo(conn).list_by_task(tid))
     ImportRowRepo(conn).replace_for_task(tid, rows)

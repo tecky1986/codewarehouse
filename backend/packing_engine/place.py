@@ -371,6 +371,132 @@ def maximal_space(
     return _finish_plan("maxspace", containers, unassigned)
 
 
+# ---------------------------------------------------------------------------
+# Wall Fill: dense per-cargo_type layers.  Items are grouped by cargo_type,
+# largest single-item volume first so big box types claim whole floor
+# layers; small box types (threshold _MEDIUM_VOL) fill the gaps left over,
+# smallest first, so nothing large is ever blocked by smalls.
+# ---------------------------------------------------------------------------
+
+_MEDIUM_VOL = 1.0  # m3; a cargo_type is "small" when its smallest item is below this.
+
+
+def _wall_fill_order(items: list[CargoItem]) -> list[tuple[str, list[CargoItem]]]:
+    """(cargo_type, [items by single-item volume desc]) groups, ordered by
+    max single-item volume desc.
+
+    Largest individual box types (IB-1, GB-3, FD-1 …) go first so they can
+    claim whole floor layers; smaller types (VEN, OUTCASE …) fill the gaps
+    left behind.  Within each group, heaviest-first is the secondary key.
+    """
+    by_type: dict[str, list[CargoItem]] = {}
+    for it in items:
+        by_type.setdefault(it.cargo_type or "", []).append(it)
+    groups: list[tuple[str, list[CargoItem]]] = []
+    for cto, group in by_type.items():
+        ordered = sorted(group, key=lambda i: (-i.volume_m3(), -i.gross, i.uid))
+        groups.append((cto, ordered))
+    groups.sort(key=lambda kv: -max(i.volume_m3() for i in kv[1]))
+    return groups
+
+
+def wall_fill(
+    items: list[CargoItem],
+    containers: list[ContainerInstance],
+    settings: dict,
+    enabled_rules: list,
+    site_groups: list,
+    reporter: ProgressReporter,
+) -> Plan:
+    ctx = _Ctx(
+        containers=containers,
+        items=items,
+        settings=settings,
+        enabled_rules=enabled_rules,
+        site_groups=site_groups,
+        reporter=reporter,
+    )
+    t_groups = site_together_groups(items, site_groups)
+    sep_sites = site_separate_sites(items, site_groups)
+    spaces: dict[int, list[_Space]] = {
+        id(c): [_Space(0.0, 0.0, 0.0, float(c.inner_l), float(c.inner_w), c.max_z)]
+        for c in containers
+    }
+    unassigned: list[CargoItem] = []
+    groups = _wall_fill_order(items)
+    seen_uids: set = set()
+
+    if reporter.timed_out:
+        return _finish_plan("wall_fill", containers, [i for _, g in groups for i in g], timed_out=True)
+
+    # Phase 1: wall groups — largest box types claim floor layers.
+    # Phase 2: small box types fill the gaps, ascending height so short
+    # boxes lay the low floors and taller boxes stack on top.
+    small_types = {cto for cto, g in groups if g and min(i.volume_m3() for i in g) < _MEDIUM_VOL}
+    wall_groups = [gv for cto, gv in groups if cto not in small_types]
+    fill_groups = [gv for cto, gv in groups if cto in small_types]
+    fill_groups.sort(key=lambda gv: min(min(i.l, i.w, i.h) for i in gv))
+
+    def _try_place_all(group: list[CargoItem]) -> None:
+        for item in group:
+            if item.uid in seen_uids or reporter.timed_out:
+                continue
+            best: tuple[tuple, Candidate, _Space] | None = None
+            for c in _eligible_containers(item, containers, ctx, t_groups, sep_sites):
+                check_ctx = CheckContext(settings=settings, placed=c.placed)
+                for s in list(spaces[id(c)]):
+                    for (dx, dy, dz) in _orientations(item):
+                        if dx > s.dx + 1e-9 or dy > s.dy + 1e-9 or dz > s.dz + 1e-9:
+                            continue
+                        x0 = s.x + max(0.0, s.dx - dx)
+                        cand = Candidate(
+                            item=item,
+                            container=c,
+                            x=x0,
+                            y=s.y,
+                            z=s.z,
+                            dx=dx,
+                            dy=dy,
+                            dz=dz,
+                            load_seq=len(c.placed) + 1,
+                        )
+                        if _first_violation(cand, ctx):
+                            continue
+                        # Wall groups: low-level-first toward the door so
+                        # boxes form continuous layers (z, y, tightness).
+                        # Fill groups: smallest-first (height ascending) and
+                        # tightest-gap-first so a floor layer is completed
+                        # before moving to the next (z, height, tightness, y).
+                        if item.volume_m3() < _MEDIUM_VOL:
+                            score = (s.z, dz, s.volume() / max(dx * dy * dz, 1e-9), s.y)
+                        else:
+                            score = (s.z, s.y, s.volume() / max(dx * dy * dz, 1e-9))
+                        if best is None or score < best[0]:
+                            best = (score, cand, s)
+            if best is None:
+                unassigned.append(item)
+                continue
+            _, cand, _s = best
+            spaces[id(cand.container)] = _split_spaces(spaces[id(cand.container)], cand)
+            cand.container.placed.append(cand)
+            seen_uids.add(item.uid)
+            grp = _group_of(item, t_groups)
+            if grp is not None and ctx.group_container.get(item.site) is None:
+                ctx.group_container[item.site] = cand.container
+            reporter.tick()
+
+    for group in wall_groups:
+        if reporter.timed_out:
+            break
+        _try_place_all(group)
+    for group in fill_groups:
+        if reporter.timed_out:
+            break
+        _try_place_all(group)
+
+    return _finish_plan("wall_fill", containers, unassigned)
+
+
 def assign_load_seq(containers: list) -> None:
     """Rewrite load_seq: lower z-levels first, then deepest back face,
     then along width, then uid for determinism.
@@ -402,6 +528,7 @@ def assign_load_seq_public(containers: list) -> None:
 ALGORITHMS = {
     "dblf": dblf,
     "maxspace": maximal_space,
+    "wall_fill": wall_fill,
 }
 
 

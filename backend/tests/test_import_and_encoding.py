@@ -351,6 +351,55 @@ def test_preview_payload_reports_site_auto_confirmation(client):
     assert len(groups[0]["items"]) == 2
 
 
+def test_import_supplement_converts_cm_to_mm_and_matches(client):
+    tid = _create_task(client)
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["箱号", "长", "宽", "高", "体积", "OUTCASE", "PackMatls", "箱重", "净重", "毛重", "PN", "备注", "Site"])
+    ws.append([1, 146, 115, 110, 1.85, "A", "OUTCASE(TEST-SUP)", 136, 256, 392, "PN-SUP-1", None, "S1"])
+    buf = BytesIO()
+    wb.save(buf)
+    preview = client.post(
+        f"/api/tasks/{tid}/import",
+        files={"file": ("sup.xlsx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    ).json()["data"]
+    assert preview["can_compute"] is False
+    assert preview["unmatched"]
+
+    resp = client.post(
+        f"/api/tasks/{tid}/import/supplement",
+        json=[
+            {
+                "pn": "PN-SUP-1",
+                "name": "OUTCASE(TEST-SUP)",
+                "l": 146,
+                "w": 115,
+                "h": 110,
+                "tare": 136,
+                "net": 256,
+                "gross": 392,
+                "max_load": None,
+            }
+        ],
+    )
+    assert resp.status_code == 200
+    body = resp.json()["data"]
+    assert body["can_compute"] is True
+    assert body["unmatched"] == []
+    row = body["rows"][0]
+    assert row["b_len"] == 1460
+    assert row["c_wid"] == 1150
+    assert row["d_hgt"] == 1100
+
+    pkgs = client.get("/api/packages").json()["data"]
+    rec = next(p for p in pkgs if p.get("pn") == "PN-SUP-1")
+    assert rec["l"] == 1460
+    assert rec["w"] == 1150
+    assert rec["h"] == 1100
+    assert rec["package_type"] == "OUTCASE(TEST-SUP)"
+    assert rec["max_load"] is None
+
+
 def test_settings_defaults(client):
     data = client.get("/api/settings").json()["data"]
     assert data["manual_limit_kg"] == "30"

@@ -245,6 +245,32 @@ def test_wall_build_fills_width_row_before_top():
     assert by_uid["top"].dy == 2000
 
 
+def test_wall_fill_dense_floors():
+    box = ContainerInstance(
+        type_code="40GP",
+        seq_no=1,
+        label="40GP-1",
+        inner_l=12192,
+        inner_w=2352,
+        inner_h=2280,
+        max_payload=26000,
+        volume_m3=12192 * 2352 * 2280 / 1e9,
+    )
+    items = [
+        _item("A1", 1460, 1150, 1100, 400, cargo="A", rotatable=False),
+        _item("A2", 1460, 1150, 1100, 300, cargo="A", rotatable=False),
+        _item("B1", 770, 770, 850, 60, cargo="B", rotatable=False),
+        _item("B2", 770, 770, 850, 50, cargo="B", rotatable=False),
+    ]
+    rep = ProgressReporter(total=len(items), deadline_s=5)
+    plan = ALGORITHMS["wall_fill"](items, [box], {"time_limit_s": 5}, [], [], rep)
+    assert plan.unassigned == []
+    assert len(box.placed) == 4
+    by_uid = {p.item.uid: p for p in box.placed}
+    assert by_uid["A1"].z == 0, f"first type-A item must sit on the floor, got z={by_uid['A1'].z}"
+    assert by_uid["A2"].z == 0, f"second type-A item must sit on the floor, got z={by_uid['A2'].z}"
+
+
 def test_timeout_marks_partial_plan():
     box = _box()
     items = [_item(f"i{i}", 500, 500, 500, 10) for i in range(50)]
