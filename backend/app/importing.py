@@ -155,8 +155,30 @@ def complete_rows(conn, rows: list[dict]) -> list[dict]:
 
 
 def missing_keys(rows: list[dict]) -> list[dict]:
-    seen = []
-    keys = set()
+    excel_fields = ("b_len", "c_wid", "d_hgt", "e_cbm", "h_tare", "i_net", "j_gross")
+    by_key: dict[tuple, dict] = {}
+    for r in rows:
+        key = (r.get("k_pn") or "", r.get("g_packmatls") or "")
+        e = by_key.setdefault(
+            key,
+            {
+                "pn": r.get("k_pn"),
+                "packmatls": r.get("g_packmatls"),
+                "row_no": r.get("row_no"),
+                "b_len": None,
+                "c_wid": None,
+                "d_hgt": None,
+                "e_cbm": None,
+                "h_tare": None,
+                "i_net": None,
+                "j_gross": None,
+            },
+        )
+        for f in excel_fields:
+            if e.get(f) is None and r.get(f) is not None:
+                e[f] = r.get(f)
+    keys: set[tuple] = set()
+    seen: list[dict] = []
     for r in rows:
         if r.get("complete"):
             continue
@@ -164,7 +186,7 @@ def missing_keys(rows: list[dict]) -> list[dict]:
         if key in keys:
             continue
         keys.add(key)
-        seen.append({"pn": r.get("k_pn"), "packmatls": r.get("g_packmatls"), "row_no": r.get("row_no")})
+        seen.append(by_key[key])
     return seen
 
 
@@ -183,11 +205,42 @@ def _distinct_sites(rows: list[dict]) -> list[str]:
 
 def preview_payload(rows: list[dict]) -> dict:
     miss = missing_keys(rows)
+    excel_fields = ("b_len", "c_wid", "d_hgt", "e_cbm", "h_tare", "i_net", "j_gross")
+    by_key: dict[tuple, dict] = {}
+    for r in rows:
+        key = (r.get("k_pn") or "", r.get("g_packmatls") or "")
+        e = by_key.setdefault(
+            key,
+            {
+                "pn": r.get("k_pn"),
+                "packmatls": r.get("g_packmatls"),
+                "row_no": r.get("row_no"),
+                "b_len": None,
+                "c_wid": None,
+                "d_hgt": None,
+                "e_cbm": None,
+                "h_tare": None,
+                "i_net": None,
+                "j_gross": None,
+            },
+        )
+        for f in excel_fields:
+            if e.get(f) is None and r.get(f) is not None:
+                e[f] = r.get(f)
     unmatched = [
-        {"pn": r.get("k_pn"), "packmatls": r.get("g_packmatls"), "row_no": r.get("row_no")}
+        by_key[(r.get("k_pn") or "", r.get("g_packmatls") or "")]
         for r in rows
         if not r.get("master_match", True)
     ]
+    # de-dup unmatched by key
+    seen_unmatched: set[tuple] = set()
+    deduped_unmatched = []
+    for u in unmatched:
+        k = (u["pn"] or "", u["packmatls"] or "")
+        if k not in seen_unmatched:
+            seen_unmatched.add(k)
+            deduped_unmatched.append(u)
+    unmatched = deduped_unmatched
     distinct_sites, has_rows = _distinct_sites(rows)
     return {
         "rows": rows,

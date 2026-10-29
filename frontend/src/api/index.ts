@@ -244,8 +244,30 @@ export interface ImportRow {
 
 export interface ImportPreview {
   rows: ImportRow[];
-  missing: Array<{ pn: string | null; packmatls: string | null; row_no: number | null }>;
-  unmatched?: Array<{ pn: string | null; packmatls: string | null; row_no: number | null }>;
+  missing: Array<{
+    pn: string | null;
+    packmatls: string | null;
+    row_no: number | null;
+    b_len?: number | null;
+    c_wid?: number | null;
+    d_hgt?: number | null;
+    e_cbm?: number | null;
+    h_tare?: number | null;
+    i_net?: number | null;
+    j_gross?: number | null;
+  }>;
+  unmatched?: Array<{
+    pn: string | null;
+    packmatls: string | null;
+    row_no: number | null;
+    b_len?: number | null;
+    c_wid?: number | null;
+    d_hgt?: number | null;
+    e_cbm?: number | null;
+    h_tare?: number | null;
+    i_net?: number | null;
+    j_gross?: number | null;
+  }>;
   can_compute: boolean;
   row_count: number;
   distinct_sites?: string[];

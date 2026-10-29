@@ -422,6 +422,14 @@ class ImportRowRepo:
         return items
 
     def replace_for_task(self, task_id: int, rows: list[dict]) -> list[dict]:
+        # placements reference import_row via import_row_id (NO ACTION FK).
+        # Drop this task's placements first; they are regenerated on the
+        # next compute and must not block the re-import of import rows.
+        self.conn.execute(
+            "DELETE FROM placement WHERE import_row_id IN "
+            "(SELECT id FROM import_row WHERE task_id = ?)",
+            (task_id,),
+        )
         self.conn.execute("DELETE FROM import_row WHERE task_id = ?", (task_id,))
         cols = (
             "task_id",

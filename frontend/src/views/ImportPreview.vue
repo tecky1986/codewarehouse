@@ -48,10 +48,18 @@ interface SuppKey {
   tare: string;
   net: string;
   gross: string;
+  max_load: string;
 }
 const suppKeys = ref<SuppKey[]>([]);
 const suppDone = ref(false);
 const suppError = ref("");
+
+function cmToMm(v: number | null | undefined): string {
+  if (v == null || Number.isNaN(Number(v))) return "";
+  // b_len/c_wid/d_hgt in the preview are already mm (map_raw_rows ×10)
+  // the excel input the user typed was cm — convert back to cm for display
+  return String(Number(v / 10).toFixed(2));
+}
 
 function initSuppKeys() {
   const um = preview.value?.unmatched || [];
@@ -66,12 +74,13 @@ function initSuppKeys() {
       packmatls: u.packmatls || "",
       row_no: u.row_no,
       checked: true,
-      l: "",
-      w: "",
-      h: "",
-      tare: "",
-      net: "",
-      gross: "",
+      l: cmToMm(u.b_len),
+      w: cmToMm(u.c_wid),
+      h: cmToMm(u.d_hgt),
+      tare: u.h_tare != null ? String(u.h_tare) : "",
+      net: u.i_net != null ? String(u.i_net) : "",
+      gross: u.j_gross != null ? String(u.j_gross) : "",
+      max_load: "",
     });
   }
   suppKeys.value = keys;
@@ -117,6 +126,7 @@ async function writeSupplement() {
     tare: k.tare ? Number(k.tare) : undefined,
     net: k.net ? Number(k.net) : undefined,
     gross: k.gross ? Number(k.gross) : undefined,
+    max_load: k.max_load ? Number(k.max_load) : undefined,
   }));
   try {
     preview.value = await Tasks.supplement(tid.value, items);
@@ -521,6 +531,7 @@ onMounted(load);
                 <th>箱重kg</th>
                 <th>净重kg</th>
                 <th>毛重kg</th>
+                <th>每箱承重kg</th>
               </tr>
             </thead>
             <tbody>
@@ -534,6 +545,7 @@ onMounted(load);
                 <td><input v-model="k.tare" class="supp-input" placeholder="—" /></td>
                 <td><input v-model="k.net" class="supp-input" placeholder="—" /></td>
                 <td><input v-model="k.gross" class="supp-input" placeholder="—" /></td>
+                <td><input v-model="k.max_load" class="supp-input" placeholder="默认不限" /></td>
               </tr>
             </tbody>
           </table>
