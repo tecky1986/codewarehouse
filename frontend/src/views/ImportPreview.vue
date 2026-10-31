@@ -289,6 +289,10 @@ function downloadPending() {
   window.open(Tasks.pendingXlsxUrl(tid.value), "_blank");
 }
 
+function downloadMatched() {
+  window.open(Tasks.matchedXlsxUrl(tid.value), "_blank");
+}
+
 async function onPendingFile() {
   const file = pendingInput.value?.files?.[0];
   if (!file) return;
@@ -332,6 +336,7 @@ onMounted(load);
       </div>
       <div class="actions">
         <router-link to="/tasks" class="ghost">返回任务列表</router-link>
+        <button @click="downloadMatched" :disabled="!preview?.row_count">导出匹配表</button>
         <button @click="downloadPending" :disabled="!preview?.row_count">下载待填规格</button>
         <a class="link" href="/api/tasks/sample.xlsx" target="_blank">下载示例表</a>
       </div>
@@ -449,8 +454,11 @@ onMounted(load);
         <span class="step-badge">3</span>
         <div>
           <h2>检查导入结果</h2>
-          <p class="section-hint">N 列导入时忽略；不完整行会标黄，便于快速定位。</p>
+          <p class="section-hint">N 列导入时忽略；不完整行会标黄，便于快速定位。可导出已匹配主数据规格的完整表。</p>
         </div>
+      </div>
+      <div class="form-row" style="margin-bottom: 10px">
+        <button @click="downloadMatched" :disabled="!preview?.row_count">导出匹配表</button>
       </div>
       <div class="table-wrap">
         <table class="map-tbl">
@@ -485,6 +493,7 @@ onMounted(load);
         </div>
       </div>
       <div class="form-row" style="margin-bottom: 12px">
+        <button @click="downloadMatched" :disabled="!preview?.row_count">导出匹配表</button>
         <button @click="downloadPending" :disabled="!preview?.row_count">下载待填规格</button>
         <button @click="pendingInput?.click()" :disabled="importing">上传待填表</button>
         <input

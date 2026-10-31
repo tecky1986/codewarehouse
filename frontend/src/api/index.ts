@@ -64,6 +64,7 @@ export const Tasks = {
   },
   preview: (id: number) => req<ImportPreview>(`/api/tasks/${id}/import/preview`),
   pendingXlsxUrl: (id: number) => `/api/tasks/${id}/import/pending.xlsx`,
+  matchedXlsxUrl: (id: number) => `/api/tasks/${id}/import/matched.xlsx`,
   batchMaintain: async (id: number, file: File) => {
     const form = new FormData();
     form.append("file", file);
