@@ -408,6 +408,11 @@ export const Packages = {
     }),
   remove: (id: number) =>
     req<null>(`/api/packages/${id}`, { method: "DELETE" }),
+  batchUpdate: (ids: number[], fields: Partial<PackageMaster>) =>
+    req<PackageMaster[]>("/api/packages/batch", {
+      method: "POST",
+      body: JSON.stringify({ ids, fields }),
+    }),
   templateUrl: () => "/api/packages/template",
   exportUrl: () => "/api/packages/export",
   importFile: async (file: File) => {

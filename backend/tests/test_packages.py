@@ -109,3 +109,37 @@ def test_package_excel_import_export(client):
     headers = [c.value for c in next(xwb.active.iter_rows(max_row=1))]
     assert "pn" in headers
     assert "name" in headers
+
+
+def _pkg(client, pn, **kw):
+    body = {"pn": pn, "name": pn, "l": 100, "w": 100, "h": 100, "enabled": 1}
+    body.update(kw)
+    return client.post("/api/packages", json=body).json()["data"]
+
+
+def test_package_batch_update_one_field(client):
+    a = _pkg(client, "BAT-A", max_load=0, rotatable=0, default_loading="manual")
+    b = _pkg(client, "BAT-B", max_load=0, rotatable=0, default_loading="manual")
+    c = _pkg(client, "BAT-C", max_load=10, rotatable=1, default_loading="forklift")
+    resp = client.post(
+        "/api/packages/batch",
+        json={"ids": [a["id"], b["id"]], "fields": {"max_load": None}},
+    )
+    assert resp.status_code == 200
+    by_id = {p["id"]: p for p in resp.json()["data"]}
+    assert by_id[a["id"]]["max_load"] is None
+    assert by_id[b["id"]]["max_load"] is None
+    listed = {p["id"]: p for p in client.get("/api/packages").json()["data"]}
+    assert listed[c["id"]]["max_load"] == 10
+    again = client.post(
+        "/api/packages/batch",
+        json={"ids": [a["id"], b["id"]], "fields": {"rotatable": 1, "default_loading": "叉车"}},
+    )
+    assert again.status_code == 200
+    by_id = {p["id"]: p for p in again.json()["data"]}
+    assert by_id[a["id"]]["rotatable"] == 1
+    assert by_id[a["id"]]["default_loading"] == "forklift"
+    empty = client.post("/api/packages/batch", json={"ids": [], "fields": {"enabled": 0}})
+    assert empty.status_code == 422
+    no_field = client.post("/api/packages/batch", json={"ids": [a["id"]], "fields": {"l": 9}})
+    assert no_field.status_code == 422

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { Packages, type PackageMaster } from "@/api";
 
 const items = ref<PackageMaster[]>([]);
@@ -9,6 +9,40 @@ const error = ref("");
 const importMsg = ref("");
 const importing = ref(false);
 const importInput = ref<HTMLInputElement>();
+const selected = ref<Set<number>>(new Set());
+const batchField = ref("max_load");
+const batchValue = ref("");
+const batchBusy = ref(false);
+
+const BATCH_FIELDS = [
+  { key: "max_load", label: "每箱承重 kg", kind: "load" },
+  { key: "rotatable", label: "四面进铲", kind: "bool" },
+  { key: "same_type_stack", label: "同种堆叠", kind: "bool" },
+  { key: "default_loading", label: "默认装卸", kind: "loading" },
+  { key: "max_stack", label: "最大堆码层数", kind: "number" },
+  { key: "enabled", label: "启用", kind: "bool" },
+  { key: "cargo_type", label: "货物类型", kind: "text" },
+  { key: "package_type", label: "包装类型", kind: "text" },
+] as const;
+
+const currentBatch = computed(
+  () => BATCH_FIELDS.find((f) => f.key === batchField.value) || BATCH_FIELDS[0],
+);
+const selectedCount = computed(() => selected.value.size);
+const allSelected = computed(
+  () => items.value.length > 0 && items.value.every((p) => selected.value.has(p.id)),
+);
+
+function loadingLabel(v: string | null | undefined): string {
+  if (v === "forklift" || v === "叉车") return "叉车";
+  if (v === "manual" || v === "人工") return "人工";
+  return v || "—";
+}
+
+function loadingValue(v: string | null | undefined): string {
+  if (v === "叉车" || v === "forklift") return "forklift";
+  return "manual";
+}
 
 const emptyForm = () => ({
   pn: "",
@@ -23,9 +57,9 @@ const emptyForm = () => ({
   gross: 0,
   rotatable: 1,
   same_type_stack: 0,
-  default_loading: "人工",
+  default_loading: "forklift",
   max_stack: 0,
-  max_load: 0 as number,
+  max_load: "" as string | number,
   enabled: 1,
 });
 
@@ -61,18 +95,30 @@ function startEdit(p: PackageMaster) {
     gross: p.gross ?? 0,
     rotatable: p.rotatable ?? 1,
     same_type_stack: p.same_type_stack ?? 0,
-    default_loading: p.default_loading || "人工",
+    default_loading: loadingValue(p.default_loading),
     max_stack: p.max_stack ?? 0,
-    max_load: p.max_load ?? 0,
+    max_load: p.max_load == null ? "" : p.max_load,
     enabled: p.enabled ?? 1,
   };
   showForm.value = true;
 }
 
+function parseLoad(v: string | number): number | null {
+  if (v === "" || v == null) return null;
+  const n = Number(v);
+  return Number.isNaN(n) ? null : n;
+}
+
 async function save() {
   error.value = "";
   try {
-    const body = { ...form.value, pn: form.value.pn || null, name: form.value.name || null };
+    const body = {
+      ...form.value,
+      pn: form.value.pn || null,
+      name: form.value.name || null,
+      default_loading: loadingValue(String(form.value.default_loading)),
+      max_load: parseLoad(form.value.max_load),
+    };
     if (editing.value) {
       await Packages.update(editing.value.id, body);
     } else {
@@ -82,6 +128,74 @@ async function save() {
     await load();
   } catch (e) {
     error.value = (e as Error).message;
+  }
+}
+
+function toggleOne(id: number, on: boolean) {
+  const next = new Set(selected.value);
+  if (on) next.add(id);
+  else next.delete(id);
+  selected.value = next;
+}
+
+function toggleAll(on: boolean) {
+  selected.value = on ? new Set(items.value.map((p) => p.id)) : new Set();
+}
+
+function parseBatchValue(): unknown {
+  const kind = currentBatch.value.kind;
+  const raw = batchValue.value;
+  if (kind === "load") {
+    if (raw === "" || raw === "不限") return null;
+    const n = Number(raw);
+    if (Number.isNaN(n) || n < 0) throw new Error("承重量需为 ≥0 的数字，留空表示不限");
+    return n;
+  }
+  if (kind === "bool") {
+    if (raw === "1" || raw === "是" || raw === "true") return 1;
+    if (raw === "0" || raw === "否" || raw === "false") return 0;
+    throw new Error("请选择 是 或 否");
+  }
+  if (kind === "loading") {
+    if (raw === "forklift" || raw === "叉车") return "forklift";
+    if (raw === "manual" || raw === "人工") return "manual";
+    throw new Error("请选择 叉车 或 人工");
+  }
+  if (kind === "number") {
+    const n = Number(raw);
+    if (raw === "" || Number.isNaN(n) || n < 0) throw new Error("请填写 ≥0 的数字");
+    return n;
+  }
+  return raw;
+}
+
+async function applyBatch() {
+  if (!selectedCount.value) {
+    error.value = "请先勾选要更新的主数据。";
+    return;
+  }
+  error.value = "";
+  importMsg.value = "";
+  let value: unknown;
+  try {
+    value = parseBatchValue();
+  } catch (e) {
+    error.value = (e as Error).message;
+    return;
+  }
+  const field = currentBatch.value.key;
+  const label = currentBatch.value.label;
+  if (!confirm(`将 ${selectedCount.value} 条主数据的「${label}」更新为同一值？`)) return;
+  batchBusy.value = true;
+  try {
+    await Packages.batchUpdate([...selected.value], { [field]: value });
+    importMsg.value = `已更新 ${selectedCount.value} 条「${label}」`;
+    selected.value = new Set();
+    await load();
+  } catch (e) {
+    error.value = (e as Error).message;
+  } finally {
+    batchBusy.value = false;
   }
 }
 
@@ -150,6 +264,42 @@ onMounted(load);
     <p v-if="error" class="error">{{ error }}</p>
     <p v-if="importMsg" class="ok-text">{{ importMsg }}</p>
 
+    <div class="batch-bar">
+      <span class="batch-count">已选 {{ selectedCount }} 条</span>
+      <select v-model="batchField" @change="batchValue = ''">
+        <option v-for="f in BATCH_FIELDS" :key="f.key" :value="f.key">{{ f.label }}</option>
+      </select>
+      <select v-if="currentBatch.kind === 'bool'" v-model="batchValue">
+        <option value="">选择</option>
+        <option value="1">是</option>
+        <option value="0">否</option>
+      </select>
+      <select v-else-if="currentBatch.kind === 'loading'" v-model="batchValue">
+        <option value="">选择</option>
+        <option value="forklift">叉车</option>
+        <option value="manual">人工</option>
+      </select>
+      <input
+        v-else-if="currentBatch.kind === 'load'"
+        v-model="batchValue"
+        type="number"
+        min="0"
+        step="0.1"
+        placeholder="留空=不限；0=不可被压"
+        class="batch-input"
+      />
+      <input
+        v-else
+        v-model="batchValue"
+        :type="currentBatch.kind === 'number' ? 'number' : 'text'"
+        :placeholder="'新的' + currentBatch.label"
+        class="batch-input"
+      />
+      <button class="primary" @click="applyBatch" :disabled="batchBusy || !selectedCount">
+        {{ batchBusy ? "更新中…" : "应用到所选" }}
+      </button>
+    </div>
+
     <div v-if="showForm" class="form-card">
       <h2>{{ editing ? `编辑 ${editing.pn || editing.name}` : "新增包装" }}</h2>
       <div class="grid">
@@ -167,12 +317,12 @@ onMounted(load);
         <label class="ck">同种堆叠 <input type="checkbox" v-model="form.same_type_stack" :true-value="1" :false-value="0" /></label>
         <label>默认装卸
           <select v-model="form.default_loading">
-            <option>人工</option>
-            <option>叉车</option>
+            <option value="forklift">叉车</option>
+            <option value="manual">人工</option>
           </select>
         </label>
         <label v-if="form.same_type_stack === 1">最大堆码层数 <input type="number" v-model.number="form.max_stack" /></label>
-        <label>每箱承重量kg <input type="number" step="0.1" v-model.number="form.max_load" :required="true" :min="0" placeholder="0=不可被压；留空=不限" /></label>
+        <label>每箱承重量kg <input type="number" step="0.1" v-model="form.max_load" min="0" placeholder="留空=不限；0=不可被压" /></label>
         <label class="ck">启用 <input type="checkbox" v-model="form.enabled" :true-value="1" :false-value="0" /></label>
       </div>
       <div class="form-actions">
@@ -185,6 +335,7 @@ onMounted(load);
       <table class="tbl">
         <thead>
           <tr>
+            <th class="chk"><input type="checkbox" :checked="allSelected" @change="toggleAll(($event.target as HTMLInputElement).checked)" /></th>
             <th>PN</th>
             <th>PackMatls</th>
             <th>尺寸 mm</th>
@@ -197,6 +348,13 @@ onMounted(load);
         </thead>
         <tbody>
           <tr v-for="p in items" :key="p.id">
+            <td class="chk">
+              <input
+                type="checkbox"
+                :checked="selected.has(p.id)"
+                @change="toggleOne(p.id, ($event.target as HTMLInputElement).checked)"
+              />
+            </td>
             <td class="pn">{{ p.pn }}</td>
             <td>{{ p.name }}</td>
             <td>{{ p.l }}×{{ p.w }}×{{ p.h }}</td>
@@ -207,8 +365,10 @@ onMounted(load);
               <span v-if="p.same_type_stack">同种堆叠</span>
               <span v-if="p.rotatable === 0">仅长边进铲</span>
               <span v-else>四面进铲</span>
-              <span>{{ p.default_loading }}</span>
+              <span>{{ loadingLabel(p.default_loading) }}</span>
               <span v-if="p.max_load === 0">不可被压</span>
+              <span v-else-if="p.max_load == null">承重不限</span>
+              <span v-else>承重 {{ p.max_load }}kg</span>
             </td>
             <td class="ops">
               <button @click="startEdit(p)">编辑</button>
@@ -254,6 +414,12 @@ button.primary { padding: 6px 18px; background: #1a5c38; color: #fff; border: no
 .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .hidden-input { display: none; }
 .ok-text { color: #1a5c38; font-size: 13px; margin: 0 0 12px; }
+.batch-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0 0 14px; padding: 10px 12px; background: #f7f5f2; border-radius: 6px; }
+.batch-count { font-size: 13px; color: #555; min-width: 72px; }
+.batch-bar select, .batch-input { padding: 5px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
+.batch-input { width: 180px; }
+.batch-bar button { padding: 5px 14px; }
+.tbl .chk { width: 28px; }
 
 @media (max-width: 900px) {
   .page { padding: 24px 24px 40px; }

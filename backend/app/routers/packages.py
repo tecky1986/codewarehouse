@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Body, Depends, File, UploadFile
 from fastapi.responses import Response
 
 from app.deps import get_conn
@@ -7,6 +7,8 @@ from app.errors import AppError
 from app.excel_io import export_packages, import_packages, package_template
 from app.repos import PackageMasterRepo
 from app.response import fail, ok
+
+_LOADING_MAP = {"人工": "manual", "叉车": "forklift", "manual": "manual", "forklift": "forklift"}
 
 router = APIRouter(prefix="/api/packages", tags=["packages"])
 
@@ -62,6 +64,31 @@ def import_all(file: UploadFile = File(...), repo: PackageMasterRepo = Depends(_
         except AppError as e:
             return fail(e.code, e.message, status=e.status)
     return ok({"saved": saved, "saved_count": len(saved), "skipped": skipped})
+
+
+@router.post("/batch")
+def batch_update_packages(body: dict = Body(...), repo: PackageMasterRepo = Depends(_repo)):
+    ids = body.get("ids") or []
+    fields = dict(body.get("fields") or {})
+    if not isinstance(ids, list) or not ids:
+        return fail("E_VALIDATION", "请选择至少一条主数据", status=422)
+    try:
+        ids = [int(i) for i in ids]
+    except (TypeError, ValueError):
+        return fail("E_VALIDATION", "ids 必须为整数列表", status=422)
+    patch = {k: fields[k] for k in PackageMasterRepo.BATCH_FIELDS if k in fields}
+    if not patch:
+        return fail("E_VALIDATION", "未指定可批量更新的字段", status=422)
+    if "default_loading" in patch:
+        raw = patch["default_loading"]
+        mapped = _LOADING_MAP.get(str(raw) if raw is not None else "")
+        if mapped is None:
+            return fail("E_VALIDATION", "默认装卸仅支持 叉车 / 人工", status=422)
+        patch["default_loading"] = mapped
+    try:
+        return ok(repo.batch_update(ids, patch))
+    except AppError as e:
+        return fail(e.code, e.message, status=e.status)
 
 
 @router.put("/{pid}")
