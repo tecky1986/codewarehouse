@@ -16,6 +16,7 @@ export const ALGORITHMS = [
   { key: "maxspace", label: "最大空腔" },
   { key: "extreme_point", label: "极点" },
   { key: "wall_build", label: "砌墙" },
+  { key: "wall_fill", label: "同型砌墙" },
   { key: "guillotine", label: "切割" },
   { key: "freemix", label: "自由组合" },
 ];
@@ -106,6 +107,9 @@ export interface Job {
   }>;
   progress?: Record<string, number>;
   eta_seconds?: Record<string, number>;
+  elapsed_s?: number;
+  started_at?: number;
+  finished_at?: number | null;
   error?: string | null;
   plan_ids?: number[];
   plans?: Plan[];

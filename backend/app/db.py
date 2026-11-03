@@ -155,6 +155,7 @@ def connect(path: str | Path | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA busy_timeout = 15000")
     conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = NORMAL")
     return conn
 
 
@@ -168,4 +169,9 @@ def init_schema(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE package_master ADD COLUMN max_load REAL")
     if "composite_of" not in pkg_cols:
         conn.execute("ALTER TABLE package_master ADD COLUMN composite_of TEXT")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_placement_plan ON placement(plan_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_placement_container ON placement(container_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ci_plan ON container_instance(plan_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_plan_run ON packing_plan(run_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_run_task ON packing_run(task_id)")
     conn.commit()
