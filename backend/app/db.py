@@ -140,6 +140,10 @@ def _resolve_db_path() -> Path:
     data_dir = os.environ.get("CP_DATA_DIR")
     if data_dir:
         return Path(data_dir) / "data.db"
+    if os.environ.get("VERCEL"):
+        path = Path("/tmp/container-packing")
+        path.mkdir(parents=True, exist_ok=True)
+        return path / "data.db"
     return Path(__file__).resolve().parents[1] / "data.db"
 
 

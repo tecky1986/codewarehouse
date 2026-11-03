@@ -7,6 +7,7 @@ in-memory state is gone (e.g. after a restart).
 """
 
 import json
+import os
 import sqlite3
 import threading
 import time
@@ -207,6 +208,8 @@ class JobsService:
             site_groups = json.loads(site_groups) if site_groups else []
 
         settings = self._load_settings()
+        if os.environ.get("VERCEL"):
+            settings["time_limit_s"] = min(float(settings.get("time_limit_s", 60) or 60), 8)
         packages = [
             dict(r)
             for r in self.conn.execute(
@@ -245,7 +248,10 @@ class JobsService:
             site_groups or [],
             mode,
         )
-        threading.Thread(target=self._worker, args=(job,) + args, daemon=True).start()
+        if os.environ.get("VERCEL"):
+            self._worker(job, *args)
+        else:
+            threading.Thread(target=self._worker, args=(job,) + args, daemon=True).start()
         return job
 
     # ------------------------------------------------------------------
