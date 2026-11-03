@@ -16,6 +16,7 @@ export const ALGORITHMS = [
   { key: "maxspace", label: "最大空腔" },
   { key: "extreme_point", label: "极点" },
   { key: "wall_build", label: "砌墙" },
+  { key: "wall_fill", label: "同型砌墙" },
   { key: "guillotine", label: "切割" },
   { key: "freemix", label: "自由组合" },
 ];
@@ -64,6 +65,7 @@ export const Tasks = {
   },
   preview: (id: number) => req<ImportPreview>(`/api/tasks/${id}/import/preview`),
   pendingXlsxUrl: (id: number) => `/api/tasks/${id}/import/pending.xlsx`,
+  matchedXlsxUrl: (id: number) => `/api/tasks/${id}/import/matched.xlsx`,
   batchMaintain: async (id: number, file: File) => {
     const form = new FormData();
     form.append("file", file);
@@ -105,6 +107,9 @@ export interface Job {
   }>;
   progress?: Record<string, number>;
   eta_seconds?: Record<string, number>;
+  elapsed_s?: number;
+  started_at?: number;
+  finished_at?: number | null;
   error?: string | null;
   plan_ids?: number[];
   plans?: Plan[];
@@ -407,6 +412,11 @@ export const Packages = {
     }),
   remove: (id: number) =>
     req<null>(`/api/packages/${id}`, { method: "DELETE" }),
+  batchUpdate: (ids: number[], fields: Partial<PackageMaster>) =>
+    req<PackageMaster[]>("/api/packages/batch", {
+      method: "POST",
+      body: JSON.stringify({ ids, fields }),
+    }),
   templateUrl: () => "/api/packages/template",
   exportUrl: () => "/api/packages/export",
   importFile: async (file: File) => {

@@ -58,14 +58,20 @@ def get_job(job_id: int, conn=Depends(get_conn)):
     if not db:
         return fail("E_NOT_FOUND", f"job {job_id} not found", status=404)
     run = db["run"]
+    names = _json_list(run.get("algorithms_json"))
+    algo_rows = [
+        {"name": n if isinstance(n, str) else str(n), "progress": 1.0 if run["status"] == "done" else 0.0, "eta_seconds": 0.0}
+        for n in names
+    ]
     return ok(
         {
             "id": job_id,
             "task_id": run["task_id"],
             "status": run["status"],
-            "algorithms": _json_list(run.get("algorithms_json")),
-            "progress": {},
-            "eta_seconds": {},
+            "algorithms": algo_rows,
+            "progress": {a["name"]: a["progress"] for a in algo_rows},
+            "eta_seconds": {a["name"]: 0.0 for a in algo_rows},
+            "elapsed_s": 0.0,
             "error": run.get("error"),
             "plans": db.get("plans", []),
         }
@@ -181,8 +187,7 @@ def clear_runs(tid: int, conn=Depends(get_conn)):
     TaskRepo(conn).get(tid)
     conn.execute(
         """
-        DELETE FROM packing_plan
-        WHERE id IN (
+        DELETE FROM placement WHERE plan_id IN (
             SELECT p.id FROM packing_plan p
             JOIN packing_run r ON r.id = p.run_id
             WHERE r.task_id = ?
@@ -190,7 +195,24 @@ def clear_runs(tid: int, conn=Depends(get_conn)):
         """,
         (tid,),
     )
+    conn.execute(
+        """
+        DELETE FROM container_instance WHERE plan_id IN (
+            SELECT p.id FROM packing_plan p
+            JOIN packing_run r ON r.id = p.run_id
+            WHERE r.task_id = ?
+        )
+        """,
+        (tid,),
+    )
+    conn.execute(
+        """
+        DELETE FROM packing_plan
+        WHERE run_id IN (SELECT id FROM packing_run WHERE task_id = ?)
+        """,
+        (tid,),
+    )
     conn.execute("DELETE FROM packing_run WHERE task_id = ?", (tid,))
-    TaskRepo(conn).update(tid, {"adopted_plan_id": None})
+    TaskRepo(conn).update(tid, {"adopted_plan_id": None, "status": "ready"})
     conn.commit()
     return ok(None)

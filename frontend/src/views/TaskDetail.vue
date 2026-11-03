@@ -238,15 +238,7 @@ async function selectPlan(p: Plan) {
 async function startCompute() {
   if (!task.value) return;
   error.value = "";
-  const hasPlans = plans.value.length > 0;
   try {
-    if (hasPlans) {
-      await Tasks.clearRuns(task.value.id);
-      plans.value = [];
-      selectedPlan.value = null;
-      placements.value = [];
-      selected.value = null;
-    }
     const job = await Tasks.compute(task.value.id, { algorithms: algos.value });
     jobId.value = job.id;
     showJob.value = true;

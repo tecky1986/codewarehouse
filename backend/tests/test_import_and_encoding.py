@@ -123,6 +123,81 @@ def test_n_column_ignored(client):
     assert "SHOULD-IGNORE" not in str(body["rows"][0])
 
 
+def test_matched_xlsx_exports_master_filled_table(client):
+    client.post(
+        "/api/packages",
+        json={
+            "pn": "PN-FILL",
+            "name": "BOX-A",
+            "package_type": "BOX-A",
+            "l": 1200,
+            "w": 800,
+            "h": 600,
+            "tare": 10,
+            "net": 20,
+            "gross": 30,
+            "enabled": 1,
+        },
+    )
+    client.post(
+        "/api/packages",
+        json={
+            "name": "BOX-B",
+            "package_type": "BOX-B",
+            "l": 1460,
+            "w": 1150,
+            "h": 1100,
+            "tare": 5,
+            "net": 50,
+            "gross": 392,
+            "enabled": 1,
+        },
+    )
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["箱号", "长", "宽", "高", "体积", "OUTCASE", "PackMatls", "箱重", "净重", "毛重", "PN", "备注", "Site", "集装箱号", "关单号", "DN", "尺寸"])
+    ws.append([1, None, None, None, None, "A", "BOX-A", None, None, None, "PN-FILL", None, "S1", None, None, "DN1", None])
+    ws.append([2, 146, 115, 110, 1.85, "B", "BOX-B", 5, 50, 392, None, None, "S1", None, None, "DN2", None])
+    ws.append([3, None, None, None, None, "C", "BOX-UNKNOWN", None, None, None, "NO-PN", None, "S1", None, None, "DN3", None])
+    buf = BytesIO()
+    wb.save(buf)
+    tid = _create_task(client)
+    client.post(
+        f"/api/tasks/{tid}/import",
+        files={"file": ("m.xlsx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+    resp = client.get(f"/api/tasks/{tid}/import/matched.xlsx")
+    assert resp.status_code == 200
+    assert "spreadsheetml" in resp.headers["content-type"]
+    assert "filename*=UTF-8''" in resp.headers["content-disposition"]
+    out = load_workbook(BytesIO(resp.content), data_only=True)
+    sheet = out.active
+    header = [c.value for c in sheet[1]]
+    assert header[:17] == [
+        "箱号 No", "长 Length", "宽 width", "高 high", "体积 CBM",
+        "OUTCASE NO.", "PackMatls", "箱重", "净重", "毛重",
+        "PN", "备注", "Site", "集装箱号", "关单号", "DN", "尺寸",
+    ]
+    assert header[17] == "匹配来源"
+    rows = [list(r) for r in sheet.iter_rows(min_row=2, values_only=True)]
+    assert len(rows) == 3
+    filled = rows[0]
+    assert filled[1] == 120.0
+    assert filled[2] == 80.0
+    assert filled[3] == 60.0
+    assert filled[10] == "PN-FILL"
+    assert filled[17] == "主数据"
+    table = rows[1]
+    assert table[1] == 146.0
+    assert table[2] == 115.0
+    assert table[3] == 110.0
+    assert table[17] == "原表"
+    unmatched = rows[2]
+    assert unmatched[1] is None
+    assert unmatched[10] == "NO-PN"
+    assert unmatched[17] == "未匹配"
+
+
 def test_encoding_utf8_bom_gbk():
     text = "箱号,名称\n1,货物"
     utf8, enc = decode_bytes(text.encode("utf-8"))

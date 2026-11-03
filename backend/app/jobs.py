@@ -7,6 +7,7 @@ in-memory state is gone (e.g. after a restart).
 """
 
 import json
+import os
 import sqlite3
 import threading
 import time
@@ -27,7 +28,7 @@ from packing_engine.verify import verify_plan
 
 KEEP_RUNS = 3
 
-DEFAULT_ALGORITHMS = ["dblf", "maxspace", "extreme_point", "wall_build", "guillotine", "freemix"]
+DEFAULT_ALGORITHMS = ["dblf", "maxspace", "extreme_point", "wall_build", "wall_fill", "guillotine", "freemix"]
 
 
 @dataclass
@@ -44,13 +45,28 @@ class JobState:
     plans: list = field(default_factory=list)
 
     def as_dict(self) -> dict:
+        now = time.time()
+        elapsed = (self.finished_at or now) - self.started_at
+        algo_rows = []
+        for name in self.algorithms:
+            key = name if isinstance(name, str) else str(name)
+            frac = float(self.progress.get(key, 0.0) or 0.0)
+            algo_rows.append(
+                {
+                    "name": key,
+                    "progress": frac,
+                    "eta_seconds": float(self.eta_seconds.get(key, 0.0) or 0.0),
+                    "timed_out": bool(frac < 1 and self.status == "done"),
+                }
+            )
         return {
             "id": self.run_id,
             "task_id": self.task_id,
             "status": self.status,
-            "algorithms": self.algorithms,
+            "algorithms": algo_rows,
             "progress": dict(self.progress),
             "eta_seconds": dict(self.eta_seconds),
+            "elapsed_s": round(max(0.0, elapsed), 1),
             "started_at": self.started_at,
             "finished_at": self.finished_at,
             "error": self.error,
@@ -192,6 +208,8 @@ class JobsService:
             site_groups = json.loads(site_groups) if site_groups else []
 
         settings = self._load_settings()
+        if os.environ.get("VERCEL"):
+            settings["time_limit_s"] = min(float(settings.get("time_limit_s", 60) or 60), 8)
         packages = [
             dict(r)
             for r in self.conn.execute(
@@ -217,6 +235,9 @@ class JobsService:
 
         job = JobState(run_id=run_id, task_id=tid, algorithms=algorithms)
         with _REGISTRY_LOCK:
+            for name in algorithms:
+                job.progress[name] = 0.0
+                job.eta_seconds[name] = 0.0
             _REGISTRY[run_id] = job
 
         args = (
@@ -227,7 +248,10 @@ class JobsService:
             site_groups or [],
             mode,
         )
-        threading.Thread(target=self._worker, args=(job,) + args, daemon=True).start()
+        if os.environ.get("VERCEL"):
+            self._worker(job, *args)
+        else:
+            threading.Thread(target=self._worker, args=(job,) + args, daemon=True).start()
         return job
 
     # ------------------------------------------------------------------
@@ -301,6 +325,10 @@ class JobsService:
                 on_progress=self._progress_cb(job, name),
             )
             t0 = time.monotonic()
+            with _REGISTRY_LOCK:
+                job.progress[name] = 0.0
+                job.eta_seconds[name] = 0.0
+            rep._report()
             try:
                 if locks is not None:
                     placement_fn = None if name == "freemix" else ALGORITHMS.get(name)
@@ -322,6 +350,9 @@ class JobsService:
             took = round(time.monotonic() - t0, 3)
             plan.algorithm = name
             plan.elapsed_s = took
+            with _REGISTRY_LOCK:
+                job.progress[name] = 1.0
+                job.eta_seconds[name] = 0.0
             with lock:
                 elapsed[name] = took
                 plans.append(plan)
@@ -403,9 +434,22 @@ class JobsService:
         placeholders = ",".join("?" * len(drop_ids))
         db.execute(
             f"""
-            DELETE FROM packing_plan
-            WHERE run_id IN ({placeholders})
+            DELETE FROM placement WHERE plan_id IN (
+                SELECT id FROM packing_plan WHERE run_id IN ({placeholders})
+            )
             """,
+            drop_ids,
+        )
+        db.execute(
+            f"""
+            DELETE FROM container_instance WHERE plan_id IN (
+                SELECT id FROM packing_plan WHERE run_id IN ({placeholders})
+            )
+            """,
+            drop_ids,
+        )
+        db.execute(
+            f"DELETE FROM packing_plan WHERE run_id IN ({placeholders})",
             drop_ids,
         )
         db.execute(

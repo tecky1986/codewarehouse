@@ -10,8 +10,10 @@ _DB_PATH = None
 def get_conn():
     global _CONN, _DB_PATH
     if _CONN is None:
-        _CONN = connect()
-        _DB_PATH = None
+        from app.db import _resolve_db_path
+
+        _DB_PATH = _resolve_db_path()
+        _CONN = connect(_DB_PATH)
         init_schema(_CONN)
         seed_if_empty(_CONN)
     return _CONN

@@ -38,16 +38,23 @@ class ProgressReporter:
         self._immediate_timeout = deadline_s <= 0.0
         self.deadline = self.t0 + max(deadline_s, 0.0)
         self.on_progress = on_progress
+        self._last_report = 0.0
+        self._last_done = -1
 
     def tick(self, n: int = 1) -> None:
         self.done = min(self.total, self.done + n)
-        self._report()
+        now = time.monotonic()
+        if self.done >= self.total or self.done == 1 or now - self._last_report >= 0.2 or self.done - self._last_done >= max(1, self.total // 20):
+            self._report(now)
 
-    def _report(self) -> None:
+    def _report(self, now: Optional[float] = None) -> None:
         if not self.on_progress:
             return
+        now = now if now is not None else time.monotonic()
+        self._last_report = now
+        self._last_done = self.done
         frac = self.done / self.total
-        elapsed = time.monotonic() - self.t0
+        elapsed = now - self.t0
         eta = (elapsed / self.done * (self.total - self.done)) if 0 < self.done < self.total else 0.0
         self.on_progress(frac, eta)
 

@@ -548,3 +548,66 @@ def test_compute_keeps_recent_runs(client):
     ]
     assert len(remaining) == KEEP_RUNS
     assert remaining == run_ids[-KEEP_RUNS:]
+
+
+def test_job_algorithms_are_objects(client):
+    tid = _make_task_with_rows(client)
+    body = client.post(
+        f"/api/tasks/{tid}/compute",
+        json={"algorithms": ["dblf", "maxspace"]},
+    ).json()
+    assert body["code"] == 0, body
+    job = body["data"]
+    assert isinstance(job["algorithms"], list)
+    assert job["algorithms"]
+    assert isinstance(job["algorithms"][0], dict)
+    names = {a["name"] for a in job["algorithms"]}
+    assert names == {"dblf", "maxspace"}
+    for a in job["algorithms"]:
+        assert "progress" in a
+        assert "eta_seconds" in a
+    assert "elapsed_s" in job
+    finished = _wait_job(client, job["id"])
+    assert finished["status"] == "done"
+    assert all(a["progress"] == 1.0 for a in finished["algorithms"])
+    from app.jobs import _REGISTRY, _REGISTRY_LOCK
+
+    with _REGISTRY_LOCK:
+        _REGISTRY.pop(job["id"], None)
+    again = client.get(f"/api/jobs/{job['id']}").json()["data"]
+    assert again["status"] == "done"
+    assert isinstance(again["algorithms"][0], dict)
+    assert {a["name"] for a in again["algorithms"]} == {"dblf", "maxspace"}
+    assert all(a["progress"] == 1.0 for a in again["algorithms"])
+
+
+def test_recompute_without_clear_runs(client):
+    tid = _make_task_with_rows(client)
+    first = client.post(
+        f"/api/tasks/{tid}/compute", json={"algorithms": ["dblf"]}
+    ).json()
+    assert first["code"] == 0, first
+    _wait_job(client, first["data"]["id"])
+    plans1 = client.get(f"/api/tasks/{tid}/plans").json()["data"]
+    assert plans1
+    second = client.post(
+        f"/api/tasks/{tid}/compute", json={"algorithms": ["dblf"]}
+    ).json()
+    assert second["code"] == 0, second
+    finished = _wait_job(client, second["data"]["id"])
+    assert finished["status"] == "done"
+    plans2 = client.get(f"/api/tasks/{tid}/plans").json()["data"]
+    assert any(p["run_id"] == second["data"]["id"] for p in plans2)
+
+
+def test_progress_reporter_throttles_callbacks():
+    calls = []
+
+    def cb(frac, eta):
+        calls.append((frac, eta))
+
+    rep = ProgressReporter(total=1000, deadline_s=60, on_progress=cb)
+    for _ in range(1000):
+        rep.tick()
+    assert 2 <= len(calls) <= 80
+    assert calls[-1][0] == 1.0

@@ -140,6 +140,10 @@ def _resolve_db_path() -> Path:
     data_dir = os.environ.get("CP_DATA_DIR")
     if data_dir:
         return Path(data_dir) / "data.db"
+    if os.environ.get("VERCEL"):
+        path = Path("/tmp/container-packing")
+        path.mkdir(parents=True, exist_ok=True)
+        return path / "data.db"
     return Path(__file__).resolve().parents[1] / "data.db"
 
 
@@ -155,6 +159,7 @@ def connect(path: str | Path | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA busy_timeout = 15000")
     conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = NORMAL")
     return conn
 
 
@@ -168,4 +173,9 @@ def init_schema(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE package_master ADD COLUMN max_load REAL")
     if "composite_of" not in pkg_cols:
         conn.execute("ALTER TABLE package_master ADD COLUMN composite_of TEXT")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_placement_plan ON placement(plan_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_placement_container ON placement(container_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ci_plan ON container_instance(plan_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_plan_run ON packing_plan(run_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_run_task ON packing_run(task_id)")
     conn.commit()

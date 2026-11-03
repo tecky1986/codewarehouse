@@ -122,6 +122,10 @@ def complete_rows(conn, rows: list[dict]) -> list[dict]:
     pkg = PackageMasterRepo(conn)
     completed = []
     for row in list(rows):
+        prev_source = row.get("source_flag") or "table"
+        prev_filled = row.get("filled_fields_json") or []
+        if not isinstance(prev_filled, list):
+            prev_filled = []
         filled = []
         source = "table"
         missing_dim = any(row.get(k) is None for k in DIM_FIELDS)
@@ -139,6 +143,9 @@ def complete_rows(conn, rows: list[dict]) -> list[dict]:
                     if row.get(field) is None and master.get(mkey) is not None:
                         row[field] = master[mkey]
                         filled.append(field)
+            elif prev_source == "master":
+                source = "master"
+                filled = list(prev_filled)
             row["master_match"] = True
         else:
             row["master_match"] = bool(master)
@@ -261,6 +268,34 @@ def pending_fill_workbook(rows: list[dict]) -> bytes:
     ws.append(["PN", "PackMatls", "长cm", "宽cm", "高cm", "箱重kg", "净重kg", "毛重kg"])
     for m in missing_keys(rows):
         ws.append([m["pn"], m["packmatls"], None, None, None, None, None, None])
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def matched_workbook(rows: list[dict]) -> bytes:
+    """Export the import table after master matching.
+
+    Uses the original 17-column A–Q layout so the file can be re-imported.
+    B/C/D are in cm (same as the source Excel). N is left blank.
+    An extra 匹配来源 column marks whether dims came from the original
+    table, were filled from package_master, or remain unmatched.
+    """
+    from app.exporting import ORIG_HEADERS, _row_values
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "匹配结果"
+    ws.append(list(ORIG_HEADERS) + ["匹配来源"])
+    for r in rows:
+        source = r.get("source_flag") or "table"
+        if not r.get("master_match", True):
+            label = "未匹配"
+        elif source == "master":
+            label = "主数据"
+        else:
+            label = "原表"
+        ws.append(_row_values(r) + [label])
     buf = BytesIO()
     wb.save(buf)
     return buf.getvalue()

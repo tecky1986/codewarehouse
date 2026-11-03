@@ -9,6 +9,7 @@ from app.errors import AppError
 from app.importing import (
     complete_rows,
     map_raw_rows,
+    matched_workbook,
     parse_maintain_xlsx,
     pending_fill_workbook,
     preview_payload,
@@ -115,6 +116,19 @@ def pending_xlsx(tid: int, conn=Depends(get_conn)):
     rows = complete_rows(conn, ImportRowRepo(conn).list_by_task(tid))
     content = pending_fill_workbook(rows)
     headers = {"Content-Disposition": content_disposition("待填规格.xlsx")}
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
+    )
+
+
+@router.get("/{tid}/import/matched.xlsx")
+def matched_xlsx(tid: int, conn=Depends(get_conn)):
+    TaskRepo(conn).get(tid)
+    rows = complete_rows(conn, ImportRowRepo(conn).list_by_task(tid))
+    content = matched_workbook(rows)
+    headers = {"Content-Disposition": content_disposition("匹配结果.xlsx")}
     return Response(
         content=content,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

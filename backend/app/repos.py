@@ -328,6 +328,21 @@ class PackageMasterRepo:
         self.conn.execute("DELETE FROM package_master WHERE id = ?", (pid,))
         self.conn.commit()
 
+    BATCH_FIELDS = (
+        "rotatable",
+        "same_type_stack",
+        "default_loading",
+        "max_stack",
+        "max_load",
+        "enabled",
+        "cargo_type",
+        "package_type",
+    )
+
+    def batch_update(self, ids: list[int], fields: dict) -> list[dict]:
+        patch = {k: fields[k] for k in self.BATCH_FIELDS if k in fields}
+        return [self.update(pid, patch) for pid in ids]
+
 
 class TaskRepo:
     def __init__(self, conn: sqlite3.Connection):
