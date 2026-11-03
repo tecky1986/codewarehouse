@@ -453,30 +453,28 @@ def test_e2e_dblf_plan_verifies():
     assert report.containers[0].unload_ok, "dblf reverse unload must succeed"
 
 
-def test_e2e_wall_build_plan_verifies():
-    plan = _run_algo("wall_build", "-wb")
+def test_e2e_lns_plan_verifies():
+    plan = _run_algo("lns", "-lns")
     report = verify_plan(plan)
-    assert report.ok, f"wall_build plan should verify clean, got {report.error_codes}"
-    assert report.containers[0].unload_ok, "wall_build reverse unload must succeed"
+    assert report.ok, f"lns plan should verify clean, got {report.error_codes}"
+    assert report.containers[0].unload_ok, "lns reverse unload must succeed"
 
 
 def test_e2e_all_algorithms_run():
     plans = {algo: _run_algo(algo, f"-{algo}") for algo in [
-        "dblf", "maxspace", "extreme_point", "wall_build", "guillotine"
+        "dblf", "maxspace", "extreme_point", "wall_fill", "lns"
     ]}
     reports = {algo: verify_plan(plan) for algo, plan in plans.items()}
     for algo, rep in reports.items():
         print(f"\n[{algo}] ok={rep.ok} errors={rep.error_codes} unload_ok={rep.containers[0].unload_ok}")
-    # at minimum: wall_build and guillotine must verify clean (fixed cursor)
-    assert reports["wall_build"].ok, f"wall_build should pass: {reports['wall_build'].error_codes}"
-    assert reports["guillotine"].ok, f"guillotine should pass: {reports['guillotine'].error_codes}"
+    assert reports["lns"].ok, f"lns should pass: {reports['lns'].error_codes}"
 
 
 def test_dump_json_report_written():
     """Write the full evaluation record to backend/tests/verify_report.json."""
     out_path = Path(__file__).parent / "verify_report.json"
     entries = []
-    for algo in ["dblf", "maxspace", "extreme_point", "wall_build", "guillotine"]:
+    for algo in ["dblf", "maxspace", "extreme_point", "wall_fill", "lns"]:
         plan = _run_algo(algo)
         report = verify_plan(plan)
         data = report.dump_json()

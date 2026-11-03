@@ -141,3 +141,26 @@
     - 后端 95+ 测试、前端 typecheck/build/test
   - [ ] 18.6 检查点 - 确保所有测试通过
     - 确保所有测试通过,如有疑问请询问用户
+
+- [x] 19. 收敛核心算法集并新增 LNS 局部优化
+  - [x] 19.1 将可运行算法收敛为 `dblf / maxspace / extreme_point / wall_fill / lns / freemix`
+    - `dblf`：Bottom-Left-Back 候选排序与 cap 模型
+    - `maxspace`：Empty Maximal Spaces 生成与裁剪校验
+    - `extreme_point`：极点候选集生成
+    - `wall_fill`：分层装填与同型铺层
+    - `lns`：Large Neighborhood Search 局部再优化
+    - `freemix`：保留自由组合容器搜索，不在本次核心策略改造范围
+  - [x] 19.2 移除已弃用的 `wall_build` 与 `guillotine` 注册项及代码主体
+    - 对应：R16 算法收敛
+  - [x] 19.3 更新默认算法列表、前端算法选项与测试断言
+    - 对应：任务 9 / 11 / 15 中的算法默认值与 UI 展示
+  - [x] 19.4 新增 LNS 优化器
+    - 以 `dblf` 结果作为种子方案
+    - 随机抽走邻域内的少量已放件
+    - 用极点 + 最大空腔候选集重新插入
+    - 以装填件数、体积利用率、用箱数、未分配数为评价键
+    - 对应：R16 优化、R31 时限控制
+  - [x] 19.5 验证
+    - 后端 102 测试通过
+    - 前端 build/test 通过
+    - 静态资源已同步到后端可托管目录

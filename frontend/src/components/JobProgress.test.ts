@@ -11,7 +11,7 @@ describe("JobProgress", () => {
       status: "running",
       algorithms: [
         { name: "dblf", progress: 0.5, eta_seconds: 12 },
-        { name: "lfh", progress: 0, eta_seconds: 0 },
+        { name: "lns", progress: 0, eta_seconds: 0 },
       ],
     };
     // Mock fetch to return a running job
@@ -27,8 +27,8 @@ describe("JobProgress", () => {
     return new Promise((resolve) => setTimeout(resolve, 50)).then(() => {
       expect(wrapper.find(".status.running").exists()).toBe(true);
       expect(wrapper.findAll(".row").length).toBe(2);
-      expect(wrapper.text()).toContain("dblf");
-      expect(wrapper.text()).toContain("lfh");
+      expect(wrapper.text()).toContain("Bottom Left Back");
+      expect(wrapper.text()).toContain("LNS 局部优化");
       wrapper.unmount();
     });
   });

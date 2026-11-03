@@ -166,7 +166,7 @@ def test_multi_algorithm_timeout_marks_partial(client):
     conn.commit()
     body = client.post(
         f"/api/tasks/{tid}/compute",
-        json={"algorithms": ["dblf", "maxspace", "extreme_point", "wall_build", "guillotine"]},
+        json={"algorithms": ["dblf", "maxspace", "extreme_point", "wall_fill", "lns"]},
     ).json()
     assert body["code"] == 0
     finished = _wait_job(client, body["data"]["id"])
@@ -504,7 +504,7 @@ def test_compute_kpi_includes_verify_and_inner_dims(client):
     tid = _make_task_with_rows(client)
     body = client.post(
         f"/api/tasks/{tid}/compute",
-        json={"algorithms": ["wall_build"]},
+        json={"algorithms": ["wall_fill"]},
     ).json()
     assert body["code"] == 0, body
     finished = _wait_job(client, body["data"]["id"])

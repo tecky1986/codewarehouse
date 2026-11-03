@@ -226,23 +226,16 @@ def test_dblf_unassigned_when_no_space():
     assert plan.unassigned[0].uid == "b"
 
 
-def test_wall_build_fills_width_row_before_top():
-    box = _box(L=1000, W=2000, H=2000, payload=100000)
+def test_lns_improves_or_preserves_placement():
+    box = _box(L=2000, W=2000, H=1000, payload=100000)
     items = [
         _item("a", 1000, 1000, 1000, 100, rotatable=False),
         _item("b", 1000, 1000, 1000, 100, rotatable=False),
-        _item("top", 1000, 2000, 500, 100, rotatable=False),
     ]
     rep = ProgressReporter(total=len(items), deadline_s=5)
-    plan = ALGORITHMS["wall_build"](items, [box], {"time_limit_s": 5}, [], [], rep)
+    plan = ALGORITHMS["lns"](items, [box], {"time_limit_s": 5, "lns_seed": 7, "lns_neighborhood": 2}, [], [], rep)
     assert not plan.unassigned
-    seq = {p.item.uid: p.load_seq for p in box.placed}
-    assert seq["a"] == 1
-    assert seq["b"] == 2
-    assert seq["top"] == 3
-    by_uid = {p.item.uid: p for p in box.placed}
-    assert by_uid["top"].z == 1000
-    assert by_uid["top"].dy == 2000
+    assert len(plan.containers[0].placed) == 2
 
 
 def test_wall_fill_dense_floors():
