@@ -1,4 +1,4 @@
-"""Vercel Python entrypoint. FastAPI app lives in backend/app/main.py."""
+"""Vercel FastAPI entrypoint. Application lives in backend/app/main.py."""
 
 import sys
 from pathlib import Path

@@ -1,12 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": null,
+  "framework": "fastapi",
   "buildCommand": "cd frontend && npm ci && npm run build && mkdir -p ../backend/static && cp -a dist/. ../backend/static/",
   "installCommand": "pip install -r requirements.txt",
   "functions": {
-    "index.py": {
-      "maxDuration": 60,
-      "excludeFiles": "{backend/tests/**,frontend/node_modules/**,frontend/src/**,**/*.zip,.github/**,.monkeycode/**}"
+    "main.py": {
+      "maxDuration": 60
     }
   }
 }

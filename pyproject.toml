@@ -1,0 +1,17 @@
+[project]
+name = "container-packing"
+version = "0.3.5"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.115.6",
+    "uvicorn==0.34.0",
+    "httpx==0.28.1",
+    "openpyxl==3.1.5",
+    "python-multipart==0.0.20",
+]
+
+[tool.vercel]
+entrypoint = "main:app"
+
+[tool.vercel.scripts]
+build = "cd frontend && npm ci && npm run build && mkdir -p ../backend/static && cp -a dist/. ../backend/static/"
