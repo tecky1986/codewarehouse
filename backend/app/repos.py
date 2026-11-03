@@ -8,6 +8,13 @@ from app.errors import ConflictError, InUseError, NotFoundError
 
 _WILDCARD_RE = re.compile(r"[?#]")
 
+_LOADING_VALUE_MAP = {
+    "人工": "人工",
+    "manual": "人工",
+    "叉车": "叉车",
+    "forklift": "叉车",
+}
+
 
 def _pn_regex(pn: str) -> re.Pattern:
     """Convert a PN pattern with ? / # wildcards to an anchored regex.
@@ -46,14 +53,26 @@ def pn_wildcard_match(pattern: str, pn: str) -> bool:
     return bool(_pn_regex(pattern).match(pn))
 
 
+def _normalize_loading(v: Any) -> Any:
+    if v is None:
+        return None
+    s = str(v).strip()
+    if not s:
+        return None
+    return _LOADING_VALUE_MAP.get(s, s)
+
+
 def _row(r: sqlite3.Row | None) -> dict | None:
     if r is None:
         return None
-    return dict(r)
+    out = dict(r)
+    if "default_loading" in out and out.get("default_loading"):
+        out["default_loading"] = _normalize_loading(out["default_loading"])
+    return out
 
 
 def _rows(cur: sqlite3.Cursor) -> list[dict]:
-    return [dict(r) for r in cur.fetchall()]
+    return [_row(r) for r in cur.fetchall()]
 
 
 class ContainerTypeRepo:
@@ -268,6 +287,7 @@ class PackageMasterRepo:
             values[cols.index("rotatable")] = 1
         if "max_load" not in data:
             values[cols.index("max_load")] = 0.0
+        values[cols.index("default_loading")] = _normalize_loading(values[cols.index("default_loading")])
         cur = self.conn.execute(
             f"INSERT INTO package_master ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
             values,
@@ -305,6 +325,7 @@ class PackageMasterRepo:
         merged = {k: data[k] if k in data else existing[k] for k in fields}
         if "max_load" not in data and merged.get("max_load") is None:
             merged["max_load"] = 0.0
+        merged["default_loading"] = _normalize_loading(merged.get("default_loading"))
         self.conn.execute(
             f"UPDATE package_master SET {', '.join(k + '=?' for k in fields)} WHERE id=?",
             [merged[k] for k in fields] + [pid],

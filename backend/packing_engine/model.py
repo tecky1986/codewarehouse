@@ -101,7 +101,22 @@ class Plan:
     mode: str = "fixed"
 
 
+_LOADING_VALUE_MAP = {
+    "叉车": "forklift",
+    "forklift": "forklift",
+    "人工": "manual",
+    "manual": "manual",
+}
+
+
+def normalize_loading(v: str | None) -> str:
+    if v is None:
+        return "manual"
+    s = str(v).strip()
+    return _LOADING_VALUE_MAP.get(s, s)
+
+
 def effective_loading(item: CargoItem, manual_limit_kg: float) -> str:
     if item.gross > manual_limit_kg:
         return "forklift"
-    return item.loading
+    return normalize_loading(item.loading)

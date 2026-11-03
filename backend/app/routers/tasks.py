@@ -185,7 +185,7 @@ def import_supplement(tid: int, items: list[dict] = Body(...), conn=Depends(get_
             "gross": it.get("gross"),
             "max_load": it.get("max_load"),
             "rotatable": 1,
-            "default_loading": "forklift",
+            "default_loading": "叉车",
         }
         saved.append(pkg.upsert(rec))
     rows = complete_rows(conn, ImportRowRepo(conn).list_by_task(tid))

@@ -29,7 +29,7 @@ def test_package_crud_and_pn_unique(client):
             "gross": 240,
             "rotatable": 1,
             "same_type_stack": 0,
-            "default_loading": "forklift",
+            "default_loading": "叉车",
         },
     )
     assert created.status_code == 200
@@ -118,9 +118,9 @@ def _pkg(client, pn, **kw):
 
 
 def test_package_batch_update_one_field(client):
-    a = _pkg(client, "BAT-A", max_load=0, rotatable=0, default_loading="manual")
-    b = _pkg(client, "BAT-B", max_load=0, rotatable=0, default_loading="manual")
-    c = _pkg(client, "BAT-C", max_load=10, rotatable=1, default_loading="forklift")
+    a = _pkg(client, "BAT-A", max_load=0, rotatable=0, default_loading="人工")
+    b = _pkg(client, "BAT-B", max_load=0, rotatable=0, default_loading="人工")
+    c = _pkg(client, "BAT-C", max_load=10, rotatable=1, default_loading="叉车")
     resp = client.post(
         "/api/packages/batch",
         json={"ids": [a["id"], b["id"]], "fields": {"max_load": None}},
@@ -138,7 +138,7 @@ def test_package_batch_update_one_field(client):
     assert again.status_code == 200
     by_id = {p["id"]: p for p in again.json()["data"]}
     assert by_id[a["id"]]["rotatable"] == 1
-    assert by_id[a["id"]]["default_loading"] == "forklift"
+    assert by_id[a["id"]]["default_loading"] == "叉车"
     empty = client.post("/api/packages/batch", json={"ids": [], "fields": {"enabled": 0}})
     assert empty.status_code == 422
     no_field = client.post("/api/packages/batch", json={"ids": [a["id"]], "fields": {"l": 9}})

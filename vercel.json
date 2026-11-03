@@ -3,6 +3,13 @@
   "framework": "fastapi",
   "buildCommand": "cd frontend && npm ci && npm run build && mkdir -p ../backend/static && cp -a dist/. ../backend/static/",
   "installCommand": "pip install -r requirements.txt",
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "main.py",
+      "maxDuration": 60
+    }
+  ],
   "functions": {
     "main.py": {
       "maxDuration": 60

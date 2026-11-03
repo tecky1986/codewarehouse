@@ -8,7 +8,7 @@ from app.excel_io import export_packages, import_packages, package_template
 from app.repos import PackageMasterRepo
 from app.response import fail, ok
 
-_LOADING_MAP = {"人工": "manual", "叉车": "forklift", "manual": "manual", "forklift": "forklift"}
+_LOADING_MAP = {"人工": "人工", "manual": "人工", "叉车": "叉车", "forklift": "叉车"}
 
 router = APIRouter(prefix="/api/packages", tags=["packages"])
 
