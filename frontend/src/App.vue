@@ -1,7 +1,7 @@
 <template>
   <div class="app-shell">
     <header class="header">
-      <router-link to="/onboarding" class="brand">集装箱装箱工具</router-link>
+      <router-link to="/onboarding" class="brand">集装箱装箱工具 {{ brandMeta }}</router-link>
       <nav class="nav">
         <router-link to="/onboarding">引导</router-link>
         <router-link to="/tasks">任务</router-link>
@@ -14,6 +14,11 @@
     <router-view />
   </div>
 </template>
+
+<script setup lang="ts">
+const { version, date } = __RELEASE_META__;
+const brandMeta = `${version}（${date}）`;
+</script>
 
 <style>
 * {

@@ -3,6 +3,8 @@ name: Windows executable
 on:
   workflow_dispatch:
   push:
+    branches:
+      - "**"
     tags:
       - "v*"
 
@@ -10,7 +12,50 @@ permissions:
   contents: write
 
 jobs:
+  check:
+    if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Update release metadata
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME}-dev"
+          date="$(date +%Y-%m-%d)"
+          printf '{\n  "version": "%s",\n  "date": "%s"\n}\n' "$version" "$date" > release_meta.json
+
+      - name: Test and build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm test
+          npm run typecheck
+          npm run build
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run backend tests
+        working-directory: backend
+        run: |
+          python -m pip install -r backend/requirements.txt
+          python -m pytest -q
+
   build:
+    if: >-
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
+      || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
       - name: Check out source
@@ -27,6 +72,17 @@ jobs:
           node-version: "20"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+
+      - name: Update release metadata
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            version="${GITHUB_REF#refs/tags/}"
+          else
+            version="${GITHUB_REF_NAME}-dev"
+          fi
+          date="$(date +%Y-%m-%d)"
+          printf '{\n  "version": "%s",\n  "date": "%s"\n}\n' "$version" "$date" > release_meta.json
 
       - name: Test and build frontend
         working-directory: frontend
@@ -58,9 +114,20 @@ jobs:
           if (-not (Test-Path dist/container_packing/container_packing.exe)) {
             throw "PyInstaller did not produce the expected executable."
           }
+          $metaVersion = 'dev'
+          $metaDate = Get-Date -Format 'yyyy-MM-dd'
+          if (Test-Path 'release_meta.json') {
+            $meta = Get-Content 'release_meta.json' -Raw | ConvertFrom-Json
+            if ($meta.version -and $meta.version -ne 'dev') {
+              $metaVersion = $meta.version
+            }
+            if ($meta.date) {
+              $metaDate = $meta.date
+            }
+          }
           Get-ChildItem dist/container_packing -Recurse -Include *.py,*.pyi,*.pyx | Remove-Item -Force
           @"
-          集装箱装箱工具 Windows 版
+          集装箱装箱工具 Windows 版 ${metaVersion}（${metaDate}）
 
           1. 解压本压缩包
           2. 双击 container_packing.exe
