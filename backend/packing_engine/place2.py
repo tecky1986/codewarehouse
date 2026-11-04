@@ -13,7 +13,8 @@ from packing_engine.rules import CheckContext, run_checkers
 
 def _orientations(item: CargoItem):
     if item.rotatable:
-        return [(item.l, item.w, item.h), (item.w, item.l, item.h)]
+        oris = [(item.l, item.w, item.h), (item.w, item.l, item.h)]
+        return sorted(dict.fromkeys(oris), key=lambda d: (d[0], d[1], d[2]))
     return [(item.l, item.w, item.h)]
 
 
@@ -116,21 +117,34 @@ def extreme_point(
             return _finish_plan("extreme_point", containers, unassigned, timed_out=True)
         seen_uids.add(item.uid)
         placed = False
-        for c in containers:
-            caps = set()
-            for p in c.placed:
-                caps.add((p.x, p.y, p.z))
-                caps.add((float(c.inner_l), p.y + p.dy, p.z))
-                caps.add((float(c.inner_l), p.y, p.z + p.dz))
-            caps.add((float(c.inner_l), 0.0, 0.0))
-            points = sorted(caps, key=lambda pt: (-pt[0], pt[2], pt[1]))
-            for (cap, y, z) in points:
-                cand = _try_at_cap(cap, y, z, item, c, settings, enabled_rules)
-                if cand is not None:
-                    c.placed.append(cand)
-                    placed = True
-                    break
-            if placed:
+        used = [c for c in containers if c.placed]
+        empty = [c for c in containers if not c.placed]
+        for wave in (used, empty):
+            best = None
+            best_score = None
+            for c in wave:
+                caps = set()
+                for p in c.placed:
+                    back = p.x + p.dx
+                    caps.add((p.x, p.y, p.z))
+                    caps.add((back, p.y + p.dy, p.z))
+                    caps.add((back, p.y, p.z + p.dz))
+                    caps.add((float(c.inner_l), p.y + p.dy, p.z))
+                    caps.add((float(c.inner_l), p.y, p.z + p.dz))
+                    caps.add((p.x, p.y + p.dy, p.z))
+                    caps.add((p.x, p.y, p.z + p.dz))
+                caps.add((float(c.inner_l), 0.0, 0.0))
+                for (cap, y, z) in caps:
+                    cand = _try_at_cap(cap, y, z, item, c, settings, enabled_rules)
+                    if cand is None:
+                        continue
+                    score = (-(cand.x + cand.dx), cand.z, cand.y, cand.dx, cand.x)
+                    if best is None or score < best_score:
+                        best = cand
+                        best_score = score
+            if best is not None:
+                best.container.placed.append(best)
+                placed = True
                 break
         if not placed:
             unassigned.append(item)

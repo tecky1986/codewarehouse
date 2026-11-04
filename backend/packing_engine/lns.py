@@ -11,7 +11,8 @@ from packing_engine.rules import CheckContext, run_checkers
 
 def _orientations(item: CargoItem):
     if item.rotatable:
-        return [(item.l, item.w, item.h), (item.w, item.l, item.h)]
+        oris = [(item.l, item.w, item.h), (item.w, item.l, item.h)]
+        return sorted(dict.fromkeys(oris), key=lambda d: (d[0], d[1], d[2]))
     return [(item.l, item.w, item.h)]
 
 
@@ -106,7 +107,13 @@ def _try_reinsert(items: list[CargoItem], containers: list[ContainerInstance], s
     placed_count = 0
     for item in ordered:
         ok = False
-        container_indices = sorted(containers_used) if containers_used else list(range(len(containers)))
+        opened = [i for i, c in enumerate(containers) if c.placed]
+        if containers_used:
+            container_indices = sorted(set(opened) | set(containers_used))
+            leftover = [i for i in range(len(containers)) if i not in container_indices]
+            container_indices.extend(leftover)
+        else:
+            container_indices = opened + [i for i in range(len(containers)) if i not in opened]
         for ci in container_indices:
             c = containers[ci]
             if not _fits_payload(c, item):

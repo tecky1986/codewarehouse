@@ -264,6 +264,71 @@ def test_wall_fill_dense_floors():
     assert by_uid["A2"].z == 0, f"second type-A item must sit on the floor, got z={by_uid['A2'].z}"
 
 
+def test_mixed_ib_boxes_fit_one_40gp():
+    """45 mixed IB cartons (52.2 m3) must occupy a single 40GP, not 2-3 empty-ish boxes."""
+    box = ContainerInstance(
+        type_code="40GP",
+        seq_no=1,
+        label="40GP-1",
+        inner_l=12032,
+        inner_w=2352,
+        inner_h=2393,
+        max_payload=26700,
+        volume_m3=12032 * 2352 * 2393 / 1e9,
+        door_w=2340,
+        door_h=2280,
+    )
+    extra = [
+        ContainerInstance(
+            type_code="40GP",
+            seq_no=i,
+            label=f"40GP-{i}",
+            inner_l=12032,
+            inner_w=2352,
+            inner_h=2393,
+            max_payload=26700,
+            volume_m3=12032 * 2352 * 2393 / 1e9,
+            door_w=2340,
+            door_h=2280,
+        )
+        for i in (2, 3)
+    ]
+    items = []
+    for i in range(18):
+        items.append(_item(f"ib1-{i}", 1460, 1150, 1100, 300, cargo="OUTCASE(IB-1)"))
+    for i in range(24):
+        items.append(_item(f"ib2-{i}", 1150, 770, 850, 220, cargo="OUTCASE(IB-2)"))
+    for i in range(3):
+        items.append(_item(f"ib3-{i}", 770, 640, 600, 180, cargo="OUTCASE(IB-3)"))
+    settings = {"time_limit_s": 30, "manual_limit_kg": 30, "fork_tine_mm": 1220, "gap_mm": 0}
+    for algo in ("dblf", "maxspace", "wall_fill", "extreme_point"):
+        containers = [
+            ContainerInstance(
+                type_code="40GP",
+                seq_no=c.seq_no,
+                label=c.label,
+                inner_l=c.inner_l,
+                inner_w=c.inner_w,
+                inner_h=c.inner_h,
+                max_payload=c.max_payload,
+                volume_m3=c.volume_m3,
+                door_w=c.door_w,
+                door_h=c.door_h,
+            )
+            for c in [box, *extra]
+        ]
+        cargo = [
+            _item(it.uid, it.l, it.w, it.h, it.gross, cargo=it.cargo_type)
+            for it in items
+        ]
+        rep = ProgressReporter(total=len(cargo), deadline_s=30)
+        plan = ALGORITHMS[algo](cargo, containers, settings, [], [], rep)
+        used = [c for c in containers if c.placed]
+        assert plan.unassigned == [], f"{algo} left {len(plan.unassigned)} unassigned"
+        assert len(used) == 1, f"{algo} used {len(used)} containers, expected 1"
+        assert abs(used[0].used_volume - 52.2) < 0.05
+
+
 def test_timeout_marks_partial_plan():
     box = _box()
     items = [_item(f"i{i}", 500, 500, 500, 10) for i in range(50)]
