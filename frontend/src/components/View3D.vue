@@ -477,7 +477,7 @@ defineExpose({
       </div>
     </div>
 
-    <div class="controls">
+    <div class="controls" :class="{ fullscreen }">
       <button @click="stepBack" :disabled="playStep <= 0" title="上一步">
         &lt;
       </button>
@@ -513,7 +513,7 @@ defineExpose({
       </button>
     </div>
 
-    <div v-if="selected" class="sel-info">
+    <div v-if="selected && !fullscreen" class="sel-info">
       <span class="pn">{{ selected.k_pn }}</span>
       <span>{{ selected.g_packmatls }}</span>
       <span>顺序 {{ selected.load_seq }}</span>
@@ -569,12 +569,15 @@ defineExpose({
 
 .canvas-wrap.fullscreen {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
   z-index: 1000;
-  height: 100vh;
+  height: calc(100vh - 48px);
   width: 100vw;
   margin: 0;
   border-radius: 0;
+  border: none;
   background: #111;
 }
 
@@ -640,6 +643,52 @@ defineExpose({
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  position: relative;
+  z-index: 1;
+}
+
+.controls.fullscreen {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1001;
+  background: #1a1a1a;
+  padding: 8px 16px;
+}
+
+.controls.fullscreen button {
+  background: #2a2a2a;
+  color: #eee;
+  border-color: #444;
+}
+
+.controls.fullscreen button.primary {
+  background: #1a5c38;
+  color: #fff;
+  border-color: #1a5c38;
+}
+
+.controls.fullscreen button:disabled {
+  opacity: 0.3;
+}
+
+.controls.fullscreen .step-label,
+.controls.fullscreen .speed,
+.controls.fullscreen .all-toggle {
+  color: #ccc;
+}
+
+.controls.fullscreen .max-btn {
+  background: #2a2a2a;
+  color: #ccc;
+  border-color: #444;
+}
+
+.controls.fullscreen .max-btn.active {
+  background: #1a5c38;
+  color: #fff;
+  border-color: #1a5c38;
 }
 
 .controls button {

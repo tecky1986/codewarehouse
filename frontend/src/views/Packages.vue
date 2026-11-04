@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 import { Packages, type PackageMaster } from "@/api";
 
 const items = ref<PackageMaster[]>([]);
@@ -13,6 +13,72 @@ const selected = ref<Set<number>>(new Set());
 const batchField = ref("max_load");
 const batchValue = ref("");
 const batchBusy = ref(false);
+
+// search
+const searchQuery = ref("");
+
+// sort
+type SortField = "pn" | "name" | "l" | "w" | "h" | "gross" | "max_load" | "max_stack" | "default_loading";
+const sortField = ref<SortField>("pn");
+const sortAsc = ref(true);
+
+// pagination
+const PAGE_SIZE = 40;
+const currentPage = ref(1);
+
+const filtered = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase();
+  if (!q) return items.value;
+  return items.value.filter((p) =>
+    (p.pn || "").toLowerCase().includes(q) ||
+    (p.name || "").toLowerCase().includes(q) ||
+    (p.package_type || "").toLowerCase().includes(q) ||
+    (p.cargo_type || "").toLowerCase().includes(q) ||
+    (p.default_loading || "").toLowerCase().includes(q)
+  );
+});
+
+const sorted = computed(() => {
+  const arr = [...filtered.value];
+  const f = sortField.value;
+  const dir = sortAsc.value ? 1 : -1;
+  arr.sort((a, b) => {
+    const av = a[f];
+    const bv = b[f];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    if (typeof av === "string" || typeof bv === "string") {
+      return String(av).localeCompare(String(bv), "zh") * dir;
+    }
+    return (Number(av) - Number(bv)) * dir;
+  });
+  return arr;
+});
+
+const totalPages = computed(() => Math.max(1, Math.ceil(sorted.value.length / PAGE_SIZE)));
+const pagedItems = computed(() => {
+  const start = (currentPage.value - 1) * PAGE_SIZE;
+  return sorted.value.slice(start, start + PAGE_SIZE);
+});
+const totalCount = computed(() => sorted.value.length);
+
+function toggleSort(field: SortField) {
+  if (sortField.value === field) {
+    sortAsc.value = !sortAsc.value;
+  } else {
+    sortField.value = field;
+    sortAsc.value = true;
+  }
+  currentPage.value = 1;
+}
+
+function sortIndicator(field: SortField): string {
+  if (sortField.value !== field) return "";
+  return sortAsc.value ? " ▲" : " ▼";
+}
+
+watch(searchQuery, () => { currentPage.value = 1; });
 
 const BATCH_FIELDS = [
   { key: "max_load", label: "每箱承重 kg", kind: "load" },
@@ -30,14 +96,8 @@ const currentBatch = computed(
 );
 const selectedCount = computed(() => selected.value.size);
 const allSelected = computed(
-  () => items.value.length > 0 && items.value.every((p) => selected.value.has(p.id)),
+  () => pagedItems.value.length > 0 && pagedItems.value.every((p) => selected.value.has(p.id)),
 );
-
-function loadingLabel(v: string | null | undefined): string {
-  if (v === "forklift" || v === "叉车") return "叉车";
-  if (v === "manual" || v === "人工") return "人工";
-  return v || "—";
-}
 
 function loadingValue(v: string | null | undefined): string {
   if (v === "叉车" || v === "forklift") return "叉车";
@@ -140,7 +200,7 @@ function toggleOne(id: number, on: boolean) {
 }
 
 function toggleAll(on: boolean) {
-  selected.value = on ? new Set(items.value.map((p) => p.id)) : new Set();
+  selected.value = on ? new Set(pagedItems.value.map((p) => p.id)) : new Set();
 }
 
 function parseBatchValue(): unknown {
@@ -332,23 +392,33 @@ onMounted(load);
       </div>
     </div>
 
+    <div class="search-bar">
+      <input
+        type="text"
+        v-model="searchQuery"
+        placeholder="搜索 PN / PackMatls / 包装类型 / 货物类型 / 装卸方式…"
+        class="search-input"
+      />
+      <span v-if="searchQuery" class="search-result-hint">共 {{ totalCount }} 条结果</span>
+    </div>
+
     <div class="table-wrap">
       <table class="tbl">
         <thead>
           <tr>
             <th class="chk"><input type="checkbox" :checked="allSelected" @change="toggleAll(($event.target as HTMLInputElement).checked)" /></th>
-            <th>PN</th>
-            <th>PackMatls</th>
-            <th>尺寸 mm</th>
-            <th>箱重</th>
-            <th>净重</th>
-            <th>毛重</th>
-            <th>属性</th>
+            <th class="sortable" @click="toggleSort('pn')">PN{{ sortIndicator('pn') }}</th>
+            <th class="sortable" @click="toggleSort('name')">PackMatls{{ sortIndicator('name') }}</th>
+            <th class="sortable" @click="toggleSort('l')">尺寸 mm{{ sortIndicator('l') }}</th>
+            <th class="sortable" @click="toggleSort('gross')">毛重{{ sortIndicator('gross') }}</th>
+            <th class="sortable" @click="toggleSort('max_stack')">堆码层数{{ sortIndicator('max_stack') }}</th>
+            <th class="sortable" @click="toggleSort('max_load')">承重量{{ sortIndicator('max_load') }}</th>
+            <th class="sortable" @click="toggleSort('default_loading')">默认装卸{{ sortIndicator('default_loading') }}</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="p in items" :key="p.id">
+          <tr v-for="p in pagedItems" :key="p.id">
             <td class="chk">
               <input
                 type="checkbox"
@@ -359,25 +429,30 @@ onMounted(load);
             <td class="pn">{{ p.pn }}</td>
             <td>{{ p.name }}</td>
             <td>{{ p.l }}×{{ p.w }}×{{ p.h }}</td>
-            <td>{{ p.tare }}</td>
-            <td>{{ p.net }}</td>
             <td>{{ p.gross }}</td>
-            <td class="attrs">
-              <span v-if="p.same_type_stack">同种堆叠</span>
-              <span v-if="p.rotatable === 0">仅长边进铲</span>
-              <span v-else>四面进铲</span>
-              <span>{{ loadingLabel(p.default_loading) }}</span>
+            <td>{{ p.max_stack ?? "-" }}</td>
+            <td>
               <span v-if="p.max_load === 0">不可被压</span>
-              <span v-else-if="p.max_load == null">承重不限</span>
-              <span v-else>承重 {{ p.max_load }}kg</span>
+              <span v-else-if="p.max_load == null">不限</span>
+              <span v-else>{{ p.max_load }}kg</span>
             </td>
+            <td>{{ p.default_loading || "-" }}</td>
             <td class="ops">
               <button @click="startEdit(p)">编辑</button>
               <button @click="remove(p)" class="danger">删除</button>
             </td>
           </tr>
+          <tr v-if="pagedItems.length === 0">
+            <td colspan="9" class="empty-hint">{{ searchQuery ? "无匹配结果" : "暂无数据" }}</td>
+          </tr>
         </tbody>
       </table>
+    </div>
+
+    <div class="pagination">
+      <button :disabled="currentPage <= 1" @click="currentPage--">上一页</button>
+      <span class="page-info">第 {{ currentPage }} / {{ totalPages }} 页 · 共 {{ totalCount }} 条</span>
+      <button :disabled="currentPage >= totalPages" @click="currentPage++">下一页</button>
     </div>
   </div>
 </template>
@@ -404,8 +479,6 @@ button.primary { padding: 6px 18px; background: #1a5c38; color: #fff; border: no
 .tbl th { text-align: left; font-size: 13px; color: #888; font-weight: 500; padding: 8px 12px; border-bottom: 1px solid #e8e4e0; }
 .tbl td { padding: 10px 12px; font-size: 14px; color: #333; border-bottom: 1px solid #f0ede8; }
 .tbl .pn { font-weight: 600; color: #1a5c38; }
-.attrs { display: flex; gap: 6px; flex-wrap: wrap; }
-.attrs span { font-size: 11px; padding: 1px 6px; border-radius: 3px; background: #f5f3f0; color: #555; }
 .ops { display: flex; gap: 6px; }
 .ops button { padding: 3px 10px; border: 1px solid #ccc; border-radius: 4px; background: #fff; font-size: 12px; cursor: pointer; }
 .ops button.danger { color: #c62828; border-color: #c62828; }
@@ -421,6 +494,28 @@ button.primary { padding: 6px 18px; background: #1a5c38; color: #fff; border: no
 .batch-input { width: 180px; }
 .batch-bar button { padding: 5px 14px; }
 .tbl .chk { width: 28px; }
+
+.search-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; }
+.search-input { flex: 1; max-width: 420px; padding: 7px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
+.search-input:focus { outline: none; border-color: #1a5c38; }
+.search-result-hint { font-size: 12px; color: #888; white-space: nowrap; }
+
+.tbl th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.tbl th.sortable:hover { color: #1a5c38; }
+
+.pagination { display: flex; gap: 10px; align-items: center; justify-content: center; margin-top: 14px; }
+.pagination button { padding: 4px 14px; border: 1px solid #ccc; border-radius: 4px; background: #fff; font-size: 13px; cursor: pointer; }
+.pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
+.pagination .page-info { font-size: 13px; color: #666; }
+.empty-hint { text-align: center; color: #999; padding: 24px; font-size: 14px; }
+
+:root[data-theme="dark"] .search-input { border-color: #444; background: #2a2a2a; color: #e8e8e8; }
+:root[data-theme="dark"] .search-input:focus { border-color: #3d8c64; }
+:root[data-theme="dark"] .tbl th.sortable:hover { color: #4dd0a0; }
+:root[data-theme="dark"] .pagination button { background: #2a2a2a; border-color: #444; color: #ccc; }
+:root[data-theme="dark"] .pagination .page-info { color: #888; }
+:root[data-theme="dark"] .empty-hint { color: #666; }
+:root[data-theme="dark"] .search-result-hint { color: #888; }
 
 @media (max-width: 900px) {
   .page { padding: 24px 24px 40px; }
