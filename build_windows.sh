@@ -33,10 +33,29 @@ if ! head -c 2 "$src/container_packing.exe" | od -An -tx1 | grep -q '4d 5a'; the
   exit 1
 fi
 
+# Refresh local release metadata so packaged titles match the latest local build.
+meta_version="$(python3 - <<'PY'
+import json, os
+path = "release_meta.json"
+if os.path.exists(path):
+    data = json.load(open(path, encoding="utf-8"))
+    print(data.get("version") or "dev")
+else:
+    print("dev")
+PY
+)"
+meta_date="$(date +%Y-%m-%d)"
+cat > release_meta.json <<EOF
+{
+  "version": "${meta_version}",
+  "date": "${meta_date}"
+}
+EOF
+
 # Reuse the existing user guide if present, otherwise write the standard one.
 if [ ! -f "$src/使用说明.txt" ]; then
-  cat > "$src/使用说明.txt" <<'EOF'
-集装箱装箱工具 Windows 版
+  cat > "$src/使用说明.txt" <<EOF
+集装箱装箱工具 Windows 版 ${meta_version}（${meta_date}）
 
 1. 解压本压缩包
 2. 双击 container_packing.exe
