@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from "vue";
 import { useRouter } from "vue-router";
 
 const router = useRouter();
@@ -36,8 +35,6 @@ const steps = [
     label: "开始使用",
   },
 ];
-
-const currentIndex = computed(() => 0);
 </script>
 
 <template>
