@@ -18,12 +18,15 @@ from packing_engine.place import (
     maximal_space,
     wall_fill,
 )
-import packing_engine.place2  # noqa: F401  (registers extra algorithms)
+import packing_engine.place2  # noqa: F401  (registers extreme_point)
 from packing_engine.kpi import evaluate
 from packing_engine.place import register
 from packing_engine.normalize import freemix as _freemix_fn
 
 register("freemix", _freemix_fn)
+
+from packing_engine.lns import lns
+from packing_engine.place2 import extreme_point
 
 __all__ = [
     "ALGORITHMS",
@@ -33,9 +36,9 @@ __all__ = [
     "Plan",
     "dblf",
     "extreme_point",
-    "guillotine",
+    "freemix",
+    "lns",
     "maximal_space",
-    "wall_build",
     "wall_fill",
     "evaluate",
 ]

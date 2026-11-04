@@ -28,7 +28,7 @@ from packing_engine.verify import verify_plan
 
 KEEP_RUNS = 3
 
-DEFAULT_ALGORITHMS = ["dblf", "maxspace", "extreme_point", "wall_build", "wall_fill", "guillotine", "freemix"]
+DEFAULT_ALGORITHMS = ["dblf", "maxspace", "extreme_point", "wall_fill", "lns", "freemix"]
 
 
 @dataclass

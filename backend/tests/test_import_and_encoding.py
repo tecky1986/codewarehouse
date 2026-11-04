@@ -472,6 +472,7 @@ def test_import_supplement_converts_cm_to_mm_and_matches(client):
     assert rec["w"] == 1150
     assert rec["h"] == 1100
     assert rec["package_type"] == "OUTCASE(TEST-SUP)"
+    assert rec["default_loading"] == "叉车"
     assert rec["max_load"] is None
 
 

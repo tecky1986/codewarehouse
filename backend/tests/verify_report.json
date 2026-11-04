@@ -234,7 +234,7 @@
     "planned_unassigned": []
   },
   {
-    "algorithm": "wall_build",
+    "algorithm": "wall_fill",
     "ok": true,
     "error_codes": {},
     "containers": [
@@ -252,13 +252,13 @@
           },
           {
             "seq": 2,
-            "uid": "b",
+            "uid": "t",
             "ok": true,
             "errors": []
           },
           {
             "seq": 3,
-            "uid": "t",
+            "uid": "b",
             "ok": true,
             "errors": []
           }
@@ -269,24 +269,24 @@
           ],
           [
             "a",
-            "b"
+            "t"
           ],
           [
             "a",
-            "b",
-            "t"
+            "t",
+            "b"
           ]
         ],
         "unload_steps": [
           {
             "seq": 3,
-            "uid": "t",
+            "uid": "b",
             "ok": true,
             "errors": []
           },
           {
             "seq": 2,
-            "uid": "b",
+            "uid": "t",
             "ok": true,
             "errors": []
           },
@@ -300,7 +300,7 @@
         "unload_frames": [
           [
             "a",
-            "b"
+            "t"
           ],
           [
             "a"
@@ -312,7 +312,7 @@
     "planned_unassigned": []
   },
   {
-    "algorithm": "guillotine",
+    "algorithm": "lns",
     "ok": true,
     "error_codes": {},
     "containers": [
@@ -330,13 +330,13 @@
           },
           {
             "seq": 2,
-            "uid": "b",
+            "uid": "t",
             "ok": true,
             "errors": []
           },
           {
             "seq": 3,
-            "uid": "t",
+            "uid": "b",
             "ok": true,
             "errors": []
           }
@@ -347,24 +347,24 @@
           ],
           [
             "a",
-            "b"
+            "t"
           ],
           [
             "a",
-            "b",
-            "t"
+            "t",
+            "b"
           ]
         ],
         "unload_steps": [
           {
             "seq": 3,
-            "uid": "t",
+            "uid": "b",
             "ok": true,
             "errors": []
           },
           {
             "seq": 2,
-            "uid": "b",
+            "uid": "t",
             "ok": true,
             "errors": []
           },
@@ -378,7 +378,7 @@
         "unload_frames": [
           [
             "a",
-            "b"
+            "t"
           ],
           [
             "a"

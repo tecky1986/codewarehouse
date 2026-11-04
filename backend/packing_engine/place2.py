@@ -13,7 +13,8 @@ from packing_engine.rules import CheckContext, run_checkers
 
 def _orientations(item: CargoItem):
     if item.rotatable:
-        return [(item.l, item.w, item.h), (item.w, item.l, item.h)]
+        oris = [(item.l, item.w, item.h), (item.w, item.l, item.h)]
+        return sorted(dict.fromkeys(oris), key=lambda d: (d[0], d[1], d[2]))
     return [(item.l, item.w, item.h)]
 
 
@@ -116,21 +117,34 @@ def extreme_point(
             return _finish_plan("extreme_point", containers, unassigned, timed_out=True)
         seen_uids.add(item.uid)
         placed = False
-        for c in containers:
-            caps = set()
-            for p in c.placed:
-                caps.add((p.x, p.y, p.z))
-                caps.add((float(c.inner_l), p.y + p.dy, p.z))
-                caps.add((float(c.inner_l), p.y, p.z + p.dz))
-            caps.add((float(c.inner_l), 0.0, 0.0))
-            points = sorted(caps, key=lambda pt: (-pt[0], pt[2], pt[1]))
-            for (cap, y, z) in points:
-                cand = _try_at_cap(cap, y, z, item, c, settings, enabled_rules)
-                if cand is not None:
-                    c.placed.append(cand)
-                    placed = True
-                    break
-            if placed:
+        used = [c for c in containers if c.placed]
+        empty = [c for c in containers if not c.placed]
+        for wave in (used, empty):
+            best = None
+            best_score = None
+            for c in wave:
+                caps = set()
+                for p in c.placed:
+                    back = p.x + p.dx
+                    caps.add((p.x, p.y, p.z))
+                    caps.add((back, p.y + p.dy, p.z))
+                    caps.add((back, p.y, p.z + p.dz))
+                    caps.add((float(c.inner_l), p.y + p.dy, p.z))
+                    caps.add((float(c.inner_l), p.y, p.z + p.dz))
+                    caps.add((p.x, p.y + p.dy, p.z))
+                    caps.add((p.x, p.y, p.z + p.dz))
+                caps.add((float(c.inner_l), 0.0, 0.0))
+                for (cap, y, z) in caps:
+                    cand = _try_at_cap(cap, y, z, item, c, settings, enabled_rules)
+                    if cand is None:
+                        continue
+                    score = (-(cand.x + cand.dx), cand.z, cand.y, cand.dx, cand.x)
+                    if best is None or score < best_score:
+                        best = cand
+                        best_score = score
+            if best is not None:
+                best.container.placed.append(best)
+                placed = True
                 break
         if not placed:
             unassigned.append(item)
@@ -139,134 +153,14 @@ def extreme_point(
 
 
 # ---------------------------------------------------------------------------
-# Wall building: each container carries a (cap, y, z, row_max_dx, row_max_dz)
-# cursor.  A row is a y-direction strip at a fixed z; all items in a row are
-# flush with the row's back cap.  When a row is full the cursor advances to
-# the next z-row and the cap is pushed door-ward by the row's deepest item.
+# Wall build and guillotine strategies were retired; the active core set now
+# uses layer-based packing, maximal spaces, extreme points, bottom-left-back
+# candidate ordering, and LNS local improvement.
 # ---------------------------------------------------------------------------
 
 
-def wall_build(
-    items: list[CargoItem],
-    containers: list[ContainerInstance],
-    settings: dict,
-    enabled_rules: list,
-    site_groups: list,
-    reporter: ProgressReporter,
-) -> Plan:
-    unassigned: list[CargoItem] = []
-    # cursor: (cap, y, z, row_max_dx, row_max_dz, layer_max_dx)
-    cursors: dict[int, tuple] = {
-        id(c): (float(c.inner_l), 0.0, 0.0, 0.0, 0.0, 0.0) for c in containers
-    }
-    ordered = order_items(items)
-    seen_uids: set = set()
-
-    if reporter.timed_out:
-        return _finish_plan("wall_build", containers, list(ordered), timed_out=True)
-
-    for item in ordered:
-        if reporter.timed_out:
-            rest = [i for i in ordered if i.uid not in seen_uids]
-            unassigned.extend(rest)
-            return _finish_plan("wall_build", containers, unassigned, timed_out=True)
-        seen_uids.add(item.uid)
-        placed = False
-        for c in containers:
-            cap, y, z, row_max_dx, row_max_dz, layer_max_dx = cursors[id(c)]
-            cand = _try_at_cap(cap, y, z, item, c, settings, enabled_rules)
-            if cand is None:
-                # primary failed: either the remaining y-space is too narrow
-                # for this item (partial row, close it and advance z) or the
-                # current y row is simply occupied.  Try the next z-row at the
-                # same cap, falling back to the start of the current row.
-                if y > 0.0:
-                    next_z = z + row_max_dz
-                    if row_max_dz <= 0:
-                        next_z = z + max(item.h, 1.0)
-                    if next_z + item.h <= c.max_z + 1e-9:
-                        cand = _try_at_cap(cap, 0.0, next_z, item, c, settings, enabled_rules)
-                        if cand is not None:
-                            cursors[id(c)] = _advance_cursor(
-                                cand, c, cap, 0.0, 0.0, layer_max_dx
-                            )
-                            c.placed.append(cand)
-                            placed = True
-                            break
-                cand = _try_at_cap(cap, 0.0, z, item, c, settings, enabled_rules)
-                if cand is None:
-                    continue
-            c.placed.append(cand)
-            cursors[id(c)] = _advance_cursor(cand, c, cap, row_max_dx, row_max_dz, layer_max_dx)
-            placed = True
-            break
-        if not placed:
-            unassigned.append(item)
-        reporter.tick()
-    return _finish_plan("wall_build", containers, unassigned)
-
-
-# ---------------------------------------------------------------------------
-# Guillotine / shelf heuristic: shelves advance door-ward along x.
-# ---------------------------------------------------------------------------
-
-
-def guillotine(
-    items: list[CargoItem],
-    containers: list[ContainerInstance],
-    settings: dict,
-    enabled_rules: list,
-    site_groups: list,
-    reporter: ProgressReporter,
-) -> Plan:
-    unassigned: list[CargoItem] = []
-    # shelves[id(c)] = list of {"cap": float, "y": float, "z": float}
-    shelves: dict[int, list] = {id(c): [] for c in containers}
-    ordered = order_items(items)
-    seen_uids: set = set()
-
-    if reporter.timed_out:
-        return _finish_plan("guillotine", containers, list(ordered), timed_out=True)
-
-    for item in ordered:
-        if reporter.timed_out:
-            rest = [i for i in ordered if i.uid not in seen_uids]
-            unassigned.extend(rest)
-            return _finish_plan("guillotine", containers, unassigned, timed_out=True)
-        seen_uids.add(item.uid)
-        placed = False
-        for c in containers:
-            target = None
-            for s in shelves[id(c)]:
-                if s["cap"] >= max((o[0] for o in _orientations(item)), default=0.0) - 1e-9:
-                    target = s
-                    break
-            if target is None:
-                target = {"cap": float(c.inner_l), "y": 0.0, "z": 0.0}
-                shelves[id(c)].append(target)
-            cand = _try_at_cap(target["cap"], target["y"], target["z"], item, c, settings, enabled_rules)
-            if cand is None:
-                continue
-            c.placed.append(cand)
-            if cand.x <= 1e-9:
-                target["y"] = cand.y + cand.dy
-                if target["y"] + cand.dy > c.inner_w - 1e-9:
-                    target["y"] = 0.0
-                    target["z"] = cand.z + cand.dz if cand.z + cand.dz < c.max_z - 1e-9 else 0.0
-                    target["cap"] = float(c.inner_l)
-                else:
-                    target["cap"] = float(c.inner_l)
-            else:
-                target["cap"] = cand.x
-            placed = True
-            break
-        if not placed:
-            unassigned.append(item)
-        reporter.tick()
-    return _finish_plan("guillotine", containers, unassigned)
-
+from packing_engine.lns import lns as _lns_fn
 
 register("extreme_point", extreme_point)
-register("wall_build", wall_build)
-register("guillotine", guillotine)
+register("lns", _lns_fn)
 

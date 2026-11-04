@@ -173,6 +173,8 @@ def init_schema(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE package_master ADD COLUMN max_load REAL")
     if "composite_of" not in pkg_cols:
         conn.execute("ALTER TABLE package_master ADD COLUMN composite_of TEXT")
+    conn.execute("UPDATE package_master SET default_loading = '叉车' WHERE default_loading = 'forklift'")
+    conn.execute("UPDATE package_master SET default_loading = '人工' WHERE default_loading = 'manual'")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_placement_plan ON placement(plan_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_placement_container ON placement(container_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_ci_plan ON container_instance(plan_id)")

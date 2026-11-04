@@ -40,8 +40,9 @@ function loadingLabel(v: string | null | undefined): string {
 }
 
 function loadingValue(v: string | null | undefined): string {
-  if (v === "叉车" || v === "forklift") return "forklift";
-  return "manual";
+  if (v === "叉车" || v === "forklift") return "叉车";
+  if (v === "人工" || v === "manual") return "人工";
+  return "叉车";
 }
 
 const emptyForm = () => ({
@@ -57,7 +58,7 @@ const emptyForm = () => ({
   gross: 0,
   rotatable: 1,
   same_type_stack: 0,
-  default_loading: "forklift",
+  default_loading: "叉车",
   max_stack: 0,
   max_load: "" as string | number,
   enabled: 1,
@@ -157,8 +158,8 @@ function parseBatchValue(): unknown {
     throw new Error("请选择 是 或 否");
   }
   if (kind === "loading") {
-    if (raw === "forklift" || raw === "叉车") return "forklift";
-    if (raw === "manual" || raw === "人工") return "manual";
+    if (raw === "forklift" || raw === "叉车") return "叉车";
+    if (raw === "manual" || raw === "人工") return "人工";
     throw new Error("请选择 叉车 或 人工");
   }
   if (kind === "number") {
@@ -276,8 +277,8 @@ onMounted(load);
       </select>
       <select v-else-if="currentBatch.kind === 'loading'" v-model="batchValue">
         <option value="">选择</option>
-        <option value="forklift">叉车</option>
-        <option value="manual">人工</option>
+        <option value="叉车">叉车</option>
+        <option value="人工">人工</option>
       </select>
       <input
         v-else-if="currentBatch.kind === 'load'"
@@ -317,8 +318,8 @@ onMounted(load);
         <label class="ck">同种堆叠 <input type="checkbox" v-model="form.same_type_stack" :true-value="1" :false-value="0" /></label>
         <label>默认装卸
           <select v-model="form.default_loading">
-            <option value="forklift">叉车</option>
-            <option value="manual">人工</option>
+            <option value="叉车">叉车</option>
+            <option value="人工">人工</option>
           </select>
         </label>
         <label v-if="form.same_type_stack === 1">最大堆码层数 <input type="number" v-model.number="form.max_stack" /></label>

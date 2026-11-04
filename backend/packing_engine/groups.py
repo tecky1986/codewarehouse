@@ -19,44 +19,39 @@ def site_separate_sites(items: list[CargoItem], site_groups: list[dict]) -> set[
 
 
 def order_items(items: list[CargoItem]) -> list[CargoItem]:
-    """PN chains first (heaviest first within a chain), then remaining items.
+    """Largest cargo families first; same PN stays contiguous within a family.
 
-    Same PN stays contiguous so it can fill the current container and
-    continue in the next one (R8).
-
-    The no-PN remainder is grouped by cargo_type so identical large boxes
-    can wall-fill the current container before the algorithm moves on to
-    smaller boxes; this prevents a 175-row real dataset from leaving
-    30+ items unassigned just because two boxes of the same type got
-    split apart by smaller interleaved items.
+    Grouping by cargo_type / packmatls keeps identical large boxes together
+    so they can claim a wall before smaller boxes fill the leftover strip.
+    Within a family, PN chains stay contiguous (R8), heaviest first.
     """
-    chains: "OrderedDict[str, list[CargoItem]]" = OrderedDict()
-    rest: list[CargoItem] = []
-    for it in items:
-        if it.pn:
-            chains.setdefault(it.pn, []).append(it)
-        else:
-            rest.append(it)
+
+    def family_key(item: CargoItem) -> str:
+        return item.cargo_type or item.packmatls or ""
 
     def heavy_first(group: list[CargoItem]) -> list[CargoItem]:
         return sorted(group, key=lambda i: (-i.gross, i.uid))
 
-    def no_pn_block(group: list[CargoItem]) -> list[CargoItem]:
-        """Group by cargo_type so same-type boxes stay contiguous."""
-        by_type: "OrderedDict[str, list[CargoItem]]" = OrderedDict()
+    def pn_block(group: list[CargoItem]) -> list[CargoItem]:
+        chains: "OrderedDict[str, list[CargoItem]]" = OrderedDict()
+        rest: list[CargoItem] = []
         for it in group:
-            by_type.setdefault(it.cargo_type, []).append(it)
-        # Order types by descending total volume, so the largest family
-        # is placed first to maximize wall-fill opportunities.
+            if it.pn:
+                chains.setdefault(it.pn, []).append(it)
+            else:
+                rest.append(it)
         ordered: list[CargoItem] = []
-        for cto in sorted(by_type.items(), key=lambda kv: -sum(i.volume_m3() for i in kv[1])):
-            ordered.extend(heavy_first(cto[1]))
+        for chain in chains.values():
+            ordered.extend(heavy_first(chain))
+        ordered.extend(heavy_first(rest))
         return ordered
 
+    by_type: "OrderedDict[str, list[CargoItem]]" = OrderedDict()
+    for it in items:
+        by_type.setdefault(family_key(it), []).append(it)
     ordered: list[CargoItem] = []
-    for group in chains.values():
-        ordered.extend(heavy_first(group))
-    ordered.extend(no_pn_block(rest))
+    for _, group in sorted(by_type.items(), key=lambda kv: -sum(i.volume_m3() for i in kv[1])):
+        ordered.extend(pn_block(group))
     return ordered
 
 

@@ -84,8 +84,13 @@ class _Ctx:
 
 def _orientations(item: CargoItem) -> list[tuple]:
     if item.rotatable:
-        return [(item.l, item.w, item.h), (item.w, item.l, item.h)]
+        oris = [(item.l, item.w, item.h), (item.w, item.l, item.h)]
+        return sorted(dict.fromkeys(oris), key=lambda d: (d[0], d[1], d[2]))
     return [(item.l, item.w, item.h)]
+
+
+def _cargo_key(item: CargoItem) -> str:
+    return item.cargo_type or item.packmatls or ""
 
 
 def _is_separate_site_conflict(item: CargoItem, container: ContainerInstance, sep_sites: set) -> bool:
@@ -177,7 +182,27 @@ def _eligible_containers(
             elif ctx.group_container[item.site] is not c:
                 continue
         out.append(c)
+    out.sort(key=lambda c: (0 if c.placed else 1, c.seq_no))
     return out
+
+
+def _container_waves(
+    item: CargoItem,
+    containers: list,
+    ctx: "_Ctx",
+    t_groups: dict,
+    sep_sites: set,
+) -> list[list]:
+    """Try already-opened containers before opening an empty one."""
+    eligible = _eligible_containers(item, containers, ctx, t_groups, sep_sites)
+    used = [c for c in eligible if c.placed]
+    empty = [c for c in eligible if not c.placed]
+    waves: list[list] = []
+    if used:
+        waves.append(used)
+    if empty:
+        waves.append(empty)
+    return waves
 
 
 def _unassign_reason(item: CargoItem, containers: list, ctx: _Ctx) -> str:
@@ -238,13 +263,16 @@ def dblf(
             rest = [i for i in ordered if i.uid not in seen_uids]
             return _finish_plan("dblf", containers, rest, timed_out=True)
         chosen_cand = None
-        for c in _eligible_containers(item, containers, ctx, t_groups, sep_sites):
-            for (cap, y, z) in list(cands[id(c)]):
-                cand = _try_place_at_cap(cap, y, z, item, c, ctx)
-                if cand is not None:
-                    c.placed.append(cand)
-                    _expand_candidates(cands[id(c)], cand, cap)
-                    chosen_cand = cand
+        for wave in _container_waves(item, containers, ctx, t_groups, sep_sites):
+            for c in wave:
+                for (cap, y, z) in list(cands[id(c)]):
+                    cand = _try_place_at_cap(cap, y, z, item, c, ctx)
+                    if cand is not None:
+                        c.placed.append(cand)
+                        _expand_candidates(cands[id(c)], cand, cap)
+                        chosen_cand = cand
+                        break
+                if chosen_cand is not None:
                     break
             if chosen_cand is not None:
                 break
@@ -291,19 +319,52 @@ def _split_spaces(spaces: list[_Space], cand: Candidate) -> list[_Space]:
         if not overlaps:
             out.append(s)
             continue
-        if cand.x > s.x:
+        if cand.x > s.x + 1e-9:
             out.append(_Space(s.x, s.y, s.z, cand.x - s.x, s.dy, s.dz))
-        if cand.x + cand.dx < s.x + s.dx:
+        if cand.x + cand.dx < s.x + s.dx - 1e-9:
             out.append(_Space(cand.x + cand.dx, s.y, s.z, s.x + s.dx - cand.x - cand.dx, s.dy, s.dz))
-        if cand.y > s.y:
-            out.append(_Space(cand.x, s.y, s.z, cand.dx, cand.y - s.y, s.dz))
-        if cand.y + cand.dy < s.y + s.dy:
-            out.append(_Space(cand.x, cand.y + cand.dy, s.z, cand.dx, s.y + s.dy - cand.y - cand.dy, s.dz))
-        if cand.z > s.z:
-            out.append(_Space(cand.x, cand.y, s.z, cand.dx, cand.dy, cand.z - s.z))
-        if cand.z + cand.dz < s.z + s.dz:
-            out.append(_Space(cand.x, cand.y, cand.z + cand.dz, cand.dx, cand.dy, s.z + s.dz - cand.z - cand.dz))
-    return out
+        if cand.y > s.y + 1e-9:
+            out.append(_Space(s.x, s.y, s.z, s.dx, cand.y - s.y, s.dz))
+        if cand.y + cand.dy < s.y + s.dy - 1e-9:
+            out.append(_Space(s.x, cand.y + cand.dy, s.z, s.dx, s.y + s.dy - cand.y - cand.dy, s.dz))
+        if cand.z > s.z + 1e-9:
+            out.append(_Space(s.x, s.y, s.z, s.dx, s.dy, cand.z - s.z))
+        if cand.z + cand.dz < s.z + s.dz - 1e-9:
+            out.append(_Space(s.x, s.y, cand.z + cand.dz, s.dx, s.dy, s.z + s.dz - cand.z - cand.dz))
+    return _prune_spaces(out)
+
+
+def _prune_spaces(spaces: list[_Space]) -> list[_Space]:
+    valid = [s for s in spaces if s.dx > 1.0 and s.dy > 1.0 and s.dz > 1.0]
+    kept: list[_Space] = []
+    for i, s in enumerate(valid):
+        contained = False
+        for j, t in enumerate(valid):
+            if i == j:
+                continue
+            if (
+                t.x <= s.x + 1e-6
+                and t.y <= s.y + 1e-6
+                and t.z <= s.z + 1e-6
+                and t.x + t.dx >= s.x + s.dx - 1e-6
+                and t.y + t.dy >= s.y + s.dy - 1e-6
+                and t.z + t.dz >= s.z + s.dz - 1e-6
+            ):
+                same = (
+                    abs(t.x - s.x) <= 1e-6
+                    and abs(t.y - s.y) <= 1e-6
+                    and abs(t.z - s.z) <= 1e-6
+                    and abs(t.dx - s.dx) <= 1e-6
+                    and abs(t.dy - s.dy) <= 1e-6
+                    and abs(t.dz - s.dz) <= 1e-6
+                )
+                if same and j > i:
+                    continue
+                contained = True
+                break
+        if not contained:
+            kept.append(s)
+    return kept
 
 
 def maximal_space(
@@ -340,29 +401,32 @@ def maximal_space(
             rest = [i for i in ordered if i.uid not in seen_uids]
             return _finish_plan("maxspace", containers, rest, timed_out=True)
         best: tuple[float, Candidate, _Space] | None = None
-        for c in _eligible_containers(item, containers, ctx, t_groups, sep_sites):
-            check_ctx = CheckContext(settings=settings, placed=c.placed)
-            for s in list(spaces[id(c)]):
-                for (dx, dy, dz) in _orientations(item):
-                    if dx > s.dx + 1e-9 or dy > s.dy + 1e-9 or dz > s.dz + 1e-9:
-                        continue
-                    x0 = s.x + max(0.0, s.dx - dx)
-                    score = (-x0, s.z, s.y, s.volume() / max(dx * dy * dz, 1e-9))
-                    cand = Candidate(
-                        item=item,
-                        container=c,
-                        x=x0,
-                        y=s.y,
-                        z=s.z,
-                        dx=dx,
-                        dy=dy,
-                        dz=dz,
-                        load_seq=len(c.placed) + 1,
-                    )
-                    if _first_violation(cand, ctx):
-                        continue
-                    if best is None or score < best[0]:
-                        best = (score, cand, s)
+        for wave in _container_waves(item, containers, ctx, t_groups, sep_sites):
+            best = None
+            for c in wave:
+                for s in list(spaces[id(c)]):
+                    for (dx, dy, dz) in _orientations(item):
+                        if dx > s.dx + 1e-9 or dy > s.dy + 1e-9 or dz > s.dz + 1e-9:
+                            continue
+                        x0 = s.x + max(0.0, s.dx - dx)
+                        score = (-x0, s.z, s.y, s.volume() / max(dx * dy * dz, 1e-9))
+                        cand = Candidate(
+                            item=item,
+                            container=c,
+                            x=x0,
+                            y=s.y,
+                            z=s.z,
+                            dx=dx,
+                            dy=dy,
+                            dz=dz,
+                            load_seq=len(c.placed) + 1,
+                        )
+                        if _first_violation(cand, ctx):
+                            continue
+                        if best is None or score < best[0]:
+                            best = (score, cand, s)
+            if best is not None:
+                break
         if best is None:
             unassigned.append(item)
         else:
@@ -398,7 +462,7 @@ def _wall_fill_order(items: list[CargoItem]) -> list[tuple[str, list[CargoItem]]
     """
     by_type: dict[str, list[CargoItem]] = {}
     for it in items:
-        by_type.setdefault(it.cargo_type or "", []).append(it)
+        by_type.setdefault(_cargo_key(it), []).append(it)
     groups: list[tuple[str, list[CargoItem]]] = []
     for cto, group in by_type.items():
         ordered = sorted(group, key=lambda i: (-i.volume_m3(), -i.gross, i.uid))
@@ -449,37 +513,32 @@ def wall_fill(
             if item.uid in seen_uids or reporter.timed_out:
                 continue
             best: tuple[tuple, Candidate, _Space] | None = None
-            for c in _eligible_containers(item, containers, ctx, t_groups, sep_sites):
-                check_ctx = CheckContext(settings=settings, placed=c.placed)
-                for s in list(spaces[id(c)]):
-                    for (dx, dy, dz) in _orientations(item):
-                        if dx > s.dx + 1e-9 or dy > s.dy + 1e-9 or dz > s.dz + 1e-9:
-                            continue
-                        x0 = s.x + max(0.0, s.dx - dx)
-                        cand = Candidate(
-                            item=item,
-                            container=c,
-                            x=x0,
-                            y=s.y,
-                            z=s.z,
-                            dx=dx,
-                            dy=dy,
-                            dz=dz,
-                            load_seq=len(c.placed) + 1,
-                        )
-                        if _first_violation(cand, ctx):
-                            continue
-                        # Wall groups: low-level-first toward the door so
-                        # boxes form continuous layers (z, y, tightness).
-                        # Fill groups: smallest-first (height ascending) and
-                        # tightest-gap-first so a floor layer is completed
-                        # before moving to the next (z, height, tightness, y).
-                        if item.volume_m3() < _MEDIUM_VOL:
-                            score = (s.z, dz, s.volume() / max(dx * dy * dz, 1e-9), s.y)
-                        else:
-                            score = (s.z, s.y, s.volume() / max(dx * dy * dz, 1e-9))
-                        if best is None or score < best[0]:
-                            best = (score, cand, s)
+            for wave in _container_waves(item, containers, ctx, t_groups, sep_sites):
+                best = None
+                for c in wave:
+                    for s in list(spaces[id(c)]):
+                        for (dx, dy, dz) in _orientations(item):
+                            if dx > s.dx + 1e-9 or dy > s.dy + 1e-9 or dz > s.dz + 1e-9:
+                                continue
+                            x0 = s.x + max(0.0, s.dx - dx)
+                            cand = Candidate(
+                                item=item,
+                                container=c,
+                                x=x0,
+                                y=s.y,
+                                z=s.z,
+                                dx=dx,
+                                dy=dy,
+                                dz=dz,
+                                load_seq=len(c.placed) + 1,
+                            )
+                            if _first_violation(cand, ctx):
+                                continue
+                            score = (-x0, s.z, s.y, s.volume() / max(dx * dy * dz, 1e-9))
+                            if best is None or score < best[0]:
+                                best = (score, cand, s)
+                if best is not None:
+                    break
             if best is None:
                 unassigned.append(item)
                 continue
