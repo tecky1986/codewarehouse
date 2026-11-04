@@ -46,6 +46,7 @@ export const router = createRouter({
       component: () => import("@/views/ExportTemplates.vue"),
     },
     { path: "/settings", component: () => import("@/views/GlobalSettings.vue") },
+    { path: "/help", component: () => import("@/views/Help.vue") },
   ],
 });
 

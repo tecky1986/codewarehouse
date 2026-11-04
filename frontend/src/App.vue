@@ -9,6 +9,7 @@
         <router-link to="/packages">主数据</router-link>
         <router-link to="/export-templates">导出</router-link>
         <router-link to="/settings">参数</router-link>
+        <router-link to="/help">说明</router-link>
       </nav>
     </header>
     <router-view />
