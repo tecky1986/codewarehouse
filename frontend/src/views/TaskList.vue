@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, computed, watch } from "vue";
 import { useRouter } from "vue-router";
 import { Tasks, type Task } from "@/api";
 import FirstUseGuide from "@/components/FirstUseGuide.vue";
@@ -20,9 +20,73 @@ const STATUS_LABEL: Record<string, string> = {
   failed: "失败",
 };
 
+const STATUS_OPTIONS = Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label }));
+
+const searchQuery = ref("");
+const statusFilter = ref("all");
+
+type SortField = "id" | "name" | "status" | "created_at";
+const sortField = ref<SortField>("id");
+const sortAsc = ref(false);
+
+const PAGE_SIZE = 20;
+const currentPage = ref(1);
+
+const filtered = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase();
+  return tasks.value.filter((t) => {
+    if (statusFilter.value !== "all" && (t.status || "draft") !== statusFilter.value) return false;
+    if (!q) return true;
+    return (t.name || "").toLowerCase().includes(q) || String(t.id).includes(q);
+  });
+});
+
+const sorted = computed(() => {
+  const arr = [...filtered.value];
+  const f = sortField.value;
+  const dir = sortAsc.value ? 1 : -1;
+  arr.sort((a, b) => {
+    const av = a[f];
+    const bv = b[f];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    if (typeof av === "string" || typeof bv === "string") {
+      return String(av).localeCompare(String(bv), "zh") * dir;
+    }
+    return (Number(av) - Number(bv)) * dir;
+  });
+  return arr;
+});
+
+const totalPages = computed(() => Math.max(1, Math.ceil(sorted.value.length / PAGE_SIZE)));
+const pagedTasks = computed(() => {
+  const start = (currentPage.value - 1) * PAGE_SIZE;
+  return sorted.value.slice(start, start + PAGE_SIZE);
+});
+const totalCount = computed(() => sorted.value.length);
+
+function toggleSort(field: SortField) {
+  if (sortField.value === field) {
+    sortAsc.value = !sortAsc.value;
+  } else {
+    sortField.value = field;
+    sortAsc.value = true;
+  }
+  currentPage.value = 1;
+}
+
+function sortIndicator(field: SortField): string {
+  if (sortField.value !== field) return "";
+  return sortAsc.value ? " ▲" : " ▼";
+}
+
+watch([searchQuery, statusFilter], () => { currentPage.value = 1; });
+
 function statusLabel(t: Task): string {
   return STATUS_LABEL[t.status || "draft"] || t.status || "草稿";
 }
+
 
 function taskHref(t: Task): string {
   const status = t.status || "draft";
@@ -90,8 +154,13 @@ async function createTask() {
 
 async function removeTask(t: Task) {
   if (!confirm(`删除任务「${t.name}」？`)) return;
-  await Tasks.remove(t.id);
-  await load();
+  error.value = "";
+  try {
+    await Tasks.remove(t.id);
+    await load();
+  } catch (e) {
+    error.value = (e as Error).message;
+  }
 }
 
 onMounted(load);
@@ -120,20 +189,34 @@ onMounted(load);
 
     <p v-if="error" class="error">{{ error }}</p>
 
+    <div v-if="tasks.length" class="filter-bar">
+      <input
+        type="text"
+        v-model="searchQuery"
+        placeholder="搜索任务名称或 ID…"
+        class="search-input"
+      />
+      <select v-model="statusFilter" class="status-select">
+        <option value="all">全部状态</option>
+        <option v-for="s in STATUS_OPTIONS" :key="s.value" :value="s.value">{{ s.label }}</option>
+      </select>
+      <span v-if="searchQuery || statusFilter !== 'all'" class="filter-hint">共 {{ totalCount }} 条结果</span>
+    </div>
+
     <div v-if="tasks.length" class="table-wrap">
       <table class="tbl">
         <thead>
           <tr>
-            <th>ID</th>
-            <th>名称</th>
-            <th>状态</th>
+            <th class="sortable" @click="toggleSort('id')">ID{{ sortIndicator('id') }}</th>
+            <th class="sortable" @click="toggleSort('name')">名称{{ sortIndicator('name') }}</th>
+            <th class="sortable" @click="toggleSort('status')">状态{{ sortIndicator('status') }}</th>
             <th>箱型</th>
-            <th>创建</th>
+            <th class="sortable" @click="toggleSort('created_at')">创建{{ sortIndicator('created_at') }}</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="t in tasks" :key="t.id">
+          <tr v-for="t in pagedTasks" :key="t.id">
             <td>{{ t.id }}</td>
             <td>
               <router-link :to="taskHref(t)">{{ t.name }}</router-link>
@@ -148,11 +231,20 @@ onMounted(load);
               <button @click="removeTask(t)" class="danger">删除</button>
             </td>
           </tr>
+          <tr v-if="pagedTasks.length === 0">
+            <td colspan="6" class="empty-hint">无匹配任务</td>
+          </tr>
         </tbody>
       </table>
     </div>
 
-    <p v-else-if="!loading" class="empty">
+    <div v-if="tasks.length && totalPages > 1" class="pagination">
+      <button :disabled="currentPage <= 1" @click="currentPage--">上一页</button>
+      <span class="page-info">第 {{ currentPage }} / {{ totalPages }} 页 · 共 {{ totalCount }} 条</span>
+      <button :disabled="currentPage >= totalPages" @click="currentPage++">下一页</button>
+    </div>
+
+    <p v-else-if="!loading && !tasks.length" class="empty">
       暂无任务。输入名称后点击「新建并配置」，会直接进入导入向导。
     </p>
     <p v-if="loading" class="loading">加载中…</p>
@@ -308,6 +400,114 @@ a:hover {
   font-size: 14px;
   padding: 24px 0;
   text-align: center;
+}
+
+.filter-bar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.search-input {
+  flex: 1;
+  min-width: 160px;
+  max-width: 320px;
+  padding: 7px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #1a5c38;
+}
+
+.status-select {
+  padding: 7px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 13px;
+  background: #fff;
+}
+
+.filter-hint {
+  font-size: 12px;
+  color: #888;
+  white-space: nowrap;
+}
+
+.tbl th.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.tbl th.sortable:hover {
+  color: #1a5c38;
+}
+
+.pagination {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 14px;
+}
+
+.pagination button {
+  padding: 4px 14px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pagination button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pagination .page-info {
+  font-size: 13px;
+  color: #666;
+}
+
+.empty-hint {
+  text-align: center;
+  color: #999;
+  padding: 24px;
+  font-size: 14px;
+}
+
+:root[data-theme="dark"] .search-input,
+:root[data-theme="dark"] .status-select {
+  background: #2a2a2a;
+  border-color: #444;
+  color: #e8e8e8;
+}
+
+:root[data-theme="dark"] .search-input:focus {
+  border-color: #3d8c64;
+}
+
+:root[data-theme="dark"] .tbl th.sortable:hover {
+  color: #4dd0a0;
+}
+
+:root[data-theme="dark"] .pagination button {
+  background: #2a2a2a;
+  border-color: #444;
+  color: #ccc;
+}
+
+:root[data-theme="dark"] .pagination .page-info,
+:root[data-theme="dark"] .filter-hint,
+:root[data-theme="dark"] .empty-hint {
+  color: #888;
 }
 
 .error {
