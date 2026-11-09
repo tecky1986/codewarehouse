@@ -167,13 +167,9 @@ const configSteps = computed(() => [
   },
 ]);
 
-const doneSteps = computed(() =>
-  configSteps.value.filter((s) => s.done).map((s) => s.n),
-);
+const doneSteps = computed(() => configSteps.value.filter((s) => s.done).map((s) => s.n));
 
-const nextConfig = computed(
-  () => configSteps.value.find((s) => !s.done) || null,
-);
+const nextConfig = computed(() => configSteps.value.find((s) => !s.done) || null);
 
 const progressPct = computed(() =>
   Math.round((doneSteps.value.length / configSteps.value.length) * 100),
@@ -219,8 +215,7 @@ async function loadTask() {
 
 async function loadPlans() {
   plans.value = await Tasks.plans(tid.value);
-  const adopted =
-    plans.value.find((p) => p.is_adopted === 1) || plans.value[0];
+  const adopted = plans.value.find((p) => p.is_adopted === 1) || plans.value[0];
   selectedPlan.value = adopted || null;
   if (selectedPlan.value) await loadPlacements(selectedPlan.value.id);
 }
@@ -388,7 +383,9 @@ onMounted(loadTask);
         <span class="k">箱型模式</span>
         <span class="v">
           <template v-if="modeSummary">{{ modeSummary }}</template>
-          <template v-else class="dim">未设置（<router-link :to="`/tasks/${task.id}/import`">去设置</router-link>）</template>
+          <span v-else class="dim"
+            >未设置（<router-link :to="`/tasks/${task.id}/import`">去设置</router-link>）</span
+          >
         </span>
       </div>
       <div class="info-item">
@@ -421,7 +418,9 @@ onMounted(loadTask);
 
     <section id="compute" class="section">
       <h2>算法与计算</h2>
-      <p class="section-hint">勾选参与对比的算法，至少保留一个。计算完成后可在 KPI 对照中采用方案。</p>
+      <p class="section-hint">
+        勾选参与对比的算法，至少保留一个。计算完成后可在 KPI 对照中采用方案。
+      </p>
       <div class="algos">
         <label v-for="a in ALGORITHMS" :key="a.key" class="algo">
           <input type="checkbox" :checked="algos.includes(a.key)" @change="toggleAlgo(a.key)" />
@@ -479,19 +478,29 @@ onMounted(loadTask);
               <td class="algo-name">{{ p.algorithm }}</td>
               <td>{{ p.is_adopted === 1 ? "是" : "" }}</td>
               <td>{{ p.kpi.overall.containers_used ?? "—" }}</td>
-              <td>{{ p.kpi.overall.vol_util != null ? (p.kpi.overall.vol_util * 100).toFixed(1) + "%" : "—" }}</td>
-              <td>{{ p.kpi.overall.pay_util != null ? (p.kpi.overall.pay_util * 100).toFixed(1) + "%" : "—" }}</td>
+              <td>
+                {{
+                  p.kpi.overall.vol_util != null
+                    ? (p.kpi.overall.vol_util * 100).toFixed(1) + "%"
+                    : "—"
+                }}
+              </td>
+              <td>
+                {{
+                  p.kpi.overall.pay_util != null
+                    ? (p.kpi.overall.pay_util * 100).toFixed(1) + "%"
+                    : "—"
+                }}
+              </td>
               <td>{{ pct(p.kpi.overall.completion) }}</td>
               <td>{{ pct(p.kpi.overall.constraint_ok_ratio) }}</td>
               <td :class="{ fail: p.kpi.overall.verify_ok === false }">{{ verifyText(p) }}</td>
               <td>{{ p.kpi.overall.unassigned_count ?? 0 }}</td>
-              <td>{{ p.kpi.overall.elapsed_s != null ? p.kpi.overall.elapsed_s.toFixed(1) : "—" }}</td>
               <td>
-                <button
-                  class="adopt"
-                  @click.stop="adopt(p)"
-                  :disabled="p.is_adopted === 1"
-                >
+                {{ p.kpi.overall.elapsed_s != null ? p.kpi.overall.elapsed_s.toFixed(1) : "—" }}
+              </td>
+              <td>
+                <button class="adopt" @click.stop="adopt(p)" :disabled="p.is_adopted === 1">
                   {{ p.is_adopted === 1 ? "已采用" : "采用" }}
                 </button>
               </td>
@@ -499,7 +508,9 @@ onMounted(loadTask);
           </tbody>
         </table>
       </div>
-      <p class="hint">E102 表示当前排未填满就开了新排；砌墙 / 切割遵守行纪律，DBLF / 最大空腔 / 极点可能出现该码。</p>
+      <p class="hint">
+        E102 表示当前排未填满就开了新排；砌墙 / 切割遵守行纪律，DBLF / 最大空腔 / 极点可能出现该码。
+      </p>
     </section>
 
     <section v-if="selectedPlan" class="section">
@@ -532,7 +543,13 @@ onMounted(loadTask);
               <td>{{ pct(c.load_seq_correct_ratio) }}</td>
               <td>{{ pct(c.constraint_ok_ratio) }}</td>
               <td :class="{ fail: c.verify_ok === false }">
-                {{ c.verify_ok == null ? "—" : c.verify_ok ? "通过" : (errorCodesText(c.verify_error_codes) || "未通过") }}
+                {{
+                  c.verify_ok == null
+                    ? "—"
+                    : c.verify_ok
+                      ? "通过"
+                      : errorCodesText(c.verify_error_codes) || "未通过"
+                }}
               </td>
             </tr>
           </tbody>
@@ -549,7 +566,9 @@ onMounted(loadTask);
         <span>顺序 {{ selected.load_seq ?? "—" }}</span>
         <span>{{ selected.x }}, {{ selected.y }}, {{ selected.z }}</span>
         <span>{{ selected.dim_x }}×{{ selected.dim_y }}×{{ selected.dim_z }}</span>
-        <span v-if="selected.unassigned_reason" class="unassign">{{ selected.unassigned_reason }}</span>
+        <span v-if="selected.unassigned_reason" class="unassign">{{
+          selected.unassigned_reason
+        }}</span>
       </div>
     </section>
 
@@ -562,94 +581,455 @@ onMounted(loadTask);
 </template>
 
 <style scoped>
-.page { padding: 32px 40px; max-width: 1100px; margin: 0 auto; }
-.page.loading { text-align: center; color: #999; padding-top: 80px; }
-.top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; }
-h1 { font-size: 22px; font-weight: 500; color: #2c2c2c; margin: 0; }
-.sub { font-size: 13px; color: #888; margin: 6px 0 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.status-pill { font-size: 12px; padding: 1px 8px; border-radius: 10px; background: #f0ede8; color: #666; }
-.status-pill.configuring { background: #eef5f0; color: #1a5c38; }
-.status-pill.ready { background: #fff8e1; color: #8a6d1b; }
-.status-pill.computing { background: #e8f0fe; color: #1a4a8c; }
-.status-pill.completed { background: #e8f5e9; color: #1a5c38; }
-.status-pill.failed { background: #fde8e8; color: #c62828; }
-.actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.guide-card { border: 1px solid #e8e4e0; border-radius: 10px; background: #fff; padding: 16px 20px; margin-bottom: 20px; }
-.guide-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.guide-head h2 { font-size: 15px; font-weight: 500; color: #2c2c2c; margin: 0; }
-.guide-sub { font-size: 12px; color: #888; margin: 4px 0 0; }
-.guide-pct { font-size: 20px; font-weight: 600; color: #1a5c38; }
-.progress-track { height: 6px; border-radius: 3px; background: #eee9e3; margin: 12px 0 14px; overflow: hidden; }
-.progress-fill { height: 100%; background: #1a5c38; border-radius: 3px; transition: width 0.3s; }
-.checklist { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.check-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #eee9e3; border-radius: 6px; text-decoration: none; color: #444; font-size: 13px; }
-.check-item:hover { border-color: #cfdcd4; background: #fafcfb; }
-.check-item.done { background: #f4f9f6; border-color: #d9e8df; }
-.check-num { flex: none; width: 20px; height: 20px; border-radius: 50%; background: #eee9e3; color: #777; font-size: 11px; display: flex; align-items: center; justify-content: center; }
-.check-item.done .check-num { background: #1a5c38; color: #fff; }
-.check-label { flex: 1; min-width: 0; }
-.check-state { flex: none; font-size: 11px; color: #999; }
-.check-item.done .check-state { color: #1a5c38; }
-.guide-next { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; padding-top: 14px; border-top: 1px solid #f0ede8; font-size: 13px; color: #555; }
-.next-btn { flex: none; padding: 6px 14px; border-radius: 4px; background: #1a5c38; color: #fff; text-decoration: none; font-size: 13px; }
-.next-btn:hover { text-decoration: none; opacity: 0.9; }
-.section-hint { font-size: 13px; color: #888; margin: -4px 0 12px; }
-.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-a.ghost { color: #888; text-decoration: none; font-size: 14px; }
-a.ghost:hover { color: #1a5c38; }
-a { color: #1a5c38; text-decoration: none; }
-a:hover { text-decoration: underline; }
-.error { color: #c62828; font-size: 13px; margin: 0 0 12px; }
-.info-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 24px; margin-bottom: 8px; }
-.info-item { display: flex; gap: 12px; font-size: 14px; min-width: 0; }
-.k { color: #888; min-width: 70px; }
-.v { color: #333; }
-.dim { color: #999; }
-.chips { display: flex; gap: 4px; flex-wrap: wrap; }
-.chip { font-size: 11px; padding: 1px 6px; border-radius: 3px; background: #f5f3f0; color: #555; }
-.section { margin-top: 28px; }
-h2 { font-size: 16px; font-weight: 500; color: #444; margin: 0 0 12px; }
-.ghost-btn { padding: 3px 12px; border: 1px solid #ccc; border-radius: 4px; background: #fff; font-size: 12px; cursor: pointer; color: #555; }
-.ghost-btn:hover { border-color: #1a5c38; color: #1a5c38; }
-.kpi-actions { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-.kpi-actions .link { font-size: 13px; display: inline-block; margin: 0; }
-.algos { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
-.algo { display: flex; align-items: center; gap: 6px; font-size: 14px; color: #333; cursor: pointer; }
-.compute-bar { display: flex; align-items: center; gap: 12px; }
-.hint { font-size: 13px; color: #888; margin: 0; }
-button.primary { padding: 6px 18px; background: #1a5c38; color: #fff; border: none; border-radius: 4px; font-size: 14px; cursor: pointer; }
-button.primary:disabled { opacity: 0.4; cursor: not-allowed; }
-.kpi { width: 100%; border-collapse: collapse; margin-top: 8px; min-width: 760px; }
-.kpi th { text-align: left; font-size: 13px; font-weight: 500; color: #888; padding: 8px 12px; border-bottom: 1px solid #e8e4e0; }
-.kpi td { padding: 10px 12px; font-size: 14px; color: #333; border-bottom: 1px solid #f0ede8; }
-.kpi tr.active td { background: #f5f8f6; }
-.kpi tbody tr { cursor: pointer; }
-.algo-name { font-weight: 600; color: #2c2c2c; text-transform: uppercase; }
-.fail { color: #c62828; }
-button.adopt { padding: 3px 12px; border: 1px solid #1a5c38; border-radius: 4px; background: transparent; color: #1a5c38; font-size: 12px; cursor: pointer; }
-button.adopt:disabled { opacity: 0.5; cursor: default; border-color: #ccc; color: #888; }
-.per-kpi { width: 100%; border-collapse: collapse; margin-top: 16px; min-width: 640px; }
-.per-kpi th { text-align: left; font-size: 13px; color: #888; padding: 6px 12px; border-bottom: 1px solid #e8e4e0; }
-.per-kpi td { padding: 8px 12px; font-size: 14px; color: #333; border-bottom: 1px solid #f0ede8; }
-.sel-card { display: flex; gap: 16px; align-items: center; padding: 8px 12px; background: #f9f7f4; border: 1px solid #e8e4e0; border-radius: 6px; font-size: 13px; color: #444; flex-wrap: wrap; }
-.sel-card .pn { font-weight: 600; color: #1a5c38; }
-.unassign { color: #c62828; }
-.job-section { border: 1px solid #d9e8df; background: #f4f9f6; border-radius: 10px; padding: 16px 20px; }
-.empty { color: #999; font-size: 14px; padding: 24px 0; text-align: center; }
+.page {
+  padding: 32px 40px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.page.loading {
+  text-align: center;
+  color: #999;
+  padding-top: 80px;
+}
+.top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+h1 {
+  font-size: 22px;
+  font-weight: 500;
+  color: #2c2c2c;
+  margin: 0;
+}
+.sub {
+  font-size: 13px;
+  color: #888;
+  margin: 6px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.status-pill {
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: #f0ede8;
+  color: #666;
+}
+.status-pill.configuring {
+  background: #eef5f0;
+  color: #1a5c38;
+}
+.status-pill.ready {
+  background: #fff8e1;
+  color: #8a6d1b;
+}
+.status-pill.computing {
+  background: #e8f0fe;
+  color: #1a4a8c;
+}
+.status-pill.completed {
+  background: #e8f5e9;
+  color: #1a5c38;
+}
+.status-pill.failed {
+  background: #fde8e8;
+  color: #c62828;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.guide-card {
+  border: 1px solid #e8e4e0;
+  border-radius: 10px;
+  background: #fff;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+.guide-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.guide-head h2 {
+  font-size: 15px;
+  font-weight: 500;
+  color: #2c2c2c;
+  margin: 0;
+}
+.guide-sub {
+  font-size: 12px;
+  color: #888;
+  margin: 4px 0 0;
+}
+.guide-pct {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1a5c38;
+}
+.progress-track {
+  height: 6px;
+  border-radius: 3px;
+  background: #eee9e3;
+  margin: 12px 0 14px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: #1a5c38;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+.checklist {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.check-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #eee9e3;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #444;
+  font-size: 13px;
+}
+.check-item:hover {
+  border-color: #cfdcd4;
+  background: #fafcfb;
+}
+.check-item.done {
+  background: #f4f9f6;
+  border-color: #d9e8df;
+}
+.check-num {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #eee9e3;
+  color: #777;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.check-item.done .check-num {
+  background: #1a5c38;
+  color: #fff;
+}
+.check-label {
+  flex: 1;
+  min-width: 0;
+}
+.check-state {
+  flex: none;
+  font-size: 11px;
+  color: #999;
+}
+.check-item.done .check-state {
+  color: #1a5c38;
+}
+.guide-next {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #f0ede8;
+  font-size: 13px;
+  color: #555;
+}
+.next-btn {
+  flex: none;
+  padding: 6px 14px;
+  border-radius: 4px;
+  background: #1a5c38;
+  color: #fff;
+  text-decoration: none;
+  font-size: 13px;
+}
+.next-btn:hover {
+  text-decoration: none;
+  opacity: 0.9;
+}
+.section-hint {
+  font-size: 13px;
+  color: #888;
+  margin: -4px 0 12px;
+}
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+a.ghost {
+  color: #888;
+  text-decoration: none;
+  font-size: 14px;
+}
+a.ghost:hover {
+  color: #1a5c38;
+}
+a {
+  color: #1a5c38;
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+.error {
+  color: #c62828;
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 24px;
+  margin-bottom: 8px;
+}
+.info-item {
+  display: flex;
+  gap: 12px;
+  font-size: 14px;
+  min-width: 0;
+}
+.k {
+  color: #888;
+  min-width: 70px;
+}
+.v {
+  color: #333;
+}
+.dim {
+  color: #999;
+}
+.chips {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.chip {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: #f5f3f0;
+  color: #555;
+}
+.section {
+  margin-top: 28px;
+}
+h2 {
+  font-size: 16px;
+  font-weight: 500;
+  color: #444;
+  margin: 0 0 12px;
+}
+.ghost-btn {
+  padding: 3px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  color: #555;
+}
+.ghost-btn:hover {
+  border-color: #1a5c38;
+  color: #1a5c38;
+}
+.kpi-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.kpi-actions .link {
+  font-size: 13px;
+  display: inline-block;
+  margin: 0;
+}
+.algos {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.algo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: #333;
+  cursor: pointer;
+}
+.compute-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.hint {
+  font-size: 13px;
+  color: #888;
+  margin: 0;
+}
+button.primary {
+  padding: 6px 18px;
+  background: #1a5c38;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+}
+button.primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.kpi {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+  min-width: 760px;
+}
+.kpi th {
+  text-align: left;
+  font-size: 13px;
+  font-weight: 500;
+  color: #888;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e8e4e0;
+}
+.kpi td {
+  padding: 10px 12px;
+  font-size: 14px;
+  color: #333;
+  border-bottom: 1px solid #f0ede8;
+}
+.kpi tr.active td {
+  background: #f5f8f6;
+}
+.kpi tbody tr {
+  cursor: pointer;
+}
+.algo-name {
+  font-weight: 600;
+  color: #2c2c2c;
+  text-transform: uppercase;
+}
+.fail {
+  color: #c62828;
+}
+button.adopt {
+  padding: 3px 12px;
+  border: 1px solid #1a5c38;
+  border-radius: 4px;
+  background: transparent;
+  color: #1a5c38;
+  font-size: 12px;
+  cursor: pointer;
+}
+button.adopt:disabled {
+  opacity: 0.5;
+  cursor: default;
+  border-color: #ccc;
+  color: #888;
+}
+.per-kpi {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 16px;
+  min-width: 640px;
+}
+.per-kpi th {
+  text-align: left;
+  font-size: 13px;
+  color: #888;
+  padding: 6px 12px;
+  border-bottom: 1px solid #e8e4e0;
+}
+.per-kpi td {
+  padding: 8px 12px;
+  font-size: 14px;
+  color: #333;
+  border-bottom: 1px solid #f0ede8;
+}
+.sel-card {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 8px 12px;
+  background: #f9f7f4;
+  border: 1px solid #e8e4e0;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #444;
+  flex-wrap: wrap;
+}
+.sel-card .pn {
+  font-weight: 600;
+  color: #1a5c38;
+}
+.unassign {
+  color: #c62828;
+}
+.job-section {
+  border: 1px solid #d9e8df;
+  background: #f4f9f6;
+  border-radius: 10px;
+  padding: 16px 20px;
+}
+.empty {
+  color: #999;
+  font-size: 14px;
+  padding: 24px 0;
+  text-align: center;
+}
 
 @media (max-width: 900px) {
-  .page { padding: 24px 24px 40px; }
-  .checklist { grid-template-columns: 1fr; }
-  .info-grid { grid-template-columns: 1fr; }
+  .page {
+    padding: 24px 24px 40px;
+  }
+  .checklist {
+    grid-template-columns: 1fr;
+  }
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 720px) {
-  .page { padding: 16px 16px 32px; }
-  .top { flex-direction: column; gap: 12px; }
-  .guide-card { padding: 14px 14px; }
-  .guide-next { flex-direction: column; align-items: stretch; }
-  .next-btn { text-align: center; }
-  .compute-bar { flex-wrap: wrap; }
-  .sel-card { gap: 10px; }
+  .page {
+    padding: 16px 16px 32px;
+  }
+  .top {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .guide-card {
+    padding: 14px 14px;
+  }
+  .guide-next {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .next-btn {
+    text-align: center;
+  }
+  .compute-bar {
+    flex-wrap: wrap;
+  }
+  .sel-card {
+    gap: 10px;
+  }
 }
 </style>

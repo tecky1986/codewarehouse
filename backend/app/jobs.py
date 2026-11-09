@@ -28,6 +28,11 @@ from packing_engine.verify import verify_plan
 
 KEEP_RUNS = 3
 
+# Finished jobs are retained in memory only up to this cap; older finished
+# entries are dropped (the canonical state lives in SQLite, so a cache miss
+# falls back to run_status_from_db).
+MAX_REGISTRY_JOBS = 32
+
 DEFAULT_ALGORITHMS = ["dblf", "maxspace", "extreme_point", "wall_fill", "lns", "freemix"]
 
 
@@ -84,12 +89,28 @@ def get_job_state(run_id: int) -> JobState | None:
         return _REGISTRY.get(run_id)
 
 
-def run_status_from_db(conn: sqlite3.Connection, run_id: int) -> dict:
-    row = dict(
-        conn.execute("SELECT * FROM packing_run WHERE id = ?", (run_id,)).fetchone()
+def _evict_finished_jobs_locked() -> None:
+    """Drop the oldest finished jobs once the registry exceeds its cap.
+
+    Must be called while holding ``_REGISTRY_LOCK``. Running jobs are never
+    evicted; the DB remains the source of truth for evicted runs.
+    """
+    if len(_REGISTRY) <= MAX_REGISTRY_JOBS:
+        return
+    finished = sorted(
+        (j for j in _REGISTRY.values() if j.status != "running"),
+        key=lambda j: j.finished_at or j.started_at,
     )
-    if row is None:
+    overflow = len(_REGISTRY) - MAX_REGISTRY_JOBS
+    for job in finished[:overflow]:
+        _REGISTRY.pop(job.run_id, None)
+
+
+def run_status_from_db(conn: sqlite3.Connection, run_id: int) -> dict:
+    fetched = conn.execute("SELECT * FROM packing_run WHERE id = ?", (run_id,)).fetchone()
+    if fetched is None:
         return {}
+    row = dict(fetched)
     plans = [
         dict(r)
         for r in conn.execute(
@@ -239,6 +260,7 @@ class JobsService:
                 job.progress[name] = 0.0
                 job.eta_seconds[name] = 0.0
             _REGISTRY[run_id] = job
+            _evict_finished_jobs_locked()
 
         args = (
             rows,

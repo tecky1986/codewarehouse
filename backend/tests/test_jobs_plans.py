@@ -611,3 +611,58 @@ def test_progress_reporter_throttles_callbacks():
         rep.tick()
     assert 2 <= len(calls) <= 80
     assert calls[-1][0] == 1.0
+
+
+def test_run_status_from_db_missing_run_returns_empty(conn):
+    assert run_status_from_db(conn, 999999) == {}
+
+
+def test_get_missing_job_returns_404(client):
+    resp = client.get("/api/jobs/999999")
+    assert resp.status_code == 404
+    body = resp.json()
+    assert body["code"] == "E_NOT_FOUND"
+
+
+def test_registry_evicts_oldest_finished_jobs():
+    from app import jobs as jobs_mod
+
+    jobs_mod._REGISTRY.clear()
+    original_cap = jobs_mod.MAX_REGISTRY_JOBS
+    try:
+        jobs_mod.MAX_REGISTRY_JOBS = 3
+        for i in range(1, 6):
+            job = jobs_mod.JobState(run_id=i, task_id=1, status="done")
+            job.finished_at = float(i)
+            with jobs_mod._REGISTRY_LOCK:
+                jobs_mod._REGISTRY[i] = job
+                jobs_mod._evict_finished_jobs_locked()
+        remaining = sorted(jobs_mod._REGISTRY)
+        assert len(remaining) <= 3
+        assert remaining == [3, 4, 5]
+    finally:
+        jobs_mod.MAX_REGISTRY_JOBS = original_cap
+        jobs_mod._REGISTRY.clear()
+
+
+def test_registry_never_evicts_running_jobs():
+    from app import jobs as jobs_mod
+
+    jobs_mod._REGISTRY.clear()
+    original_cap = jobs_mod.MAX_REGISTRY_JOBS
+    try:
+        jobs_mod.MAX_REGISTRY_JOBS = 2
+        running = jobs_mod.JobState(run_id=100, task_id=1, status="running")
+        with jobs_mod._REGISTRY_LOCK:
+            jobs_mod._REGISTRY[100] = running
+        for i in range(1, 6):
+            job = jobs_mod.JobState(run_id=i, task_id=1, status="done")
+            job.finished_at = float(i)
+            with jobs_mod._REGISTRY_LOCK:
+                jobs_mod._REGISTRY[i] = job
+                jobs_mod._evict_finished_jobs_locked()
+        assert 100 in jobs_mod._REGISTRY
+        assert len(jobs_mod._REGISTRY) <= 2
+    finally:
+        jobs_mod.MAX_REGISTRY_JOBS = original_cap
+        jobs_mod._REGISTRY.clear()

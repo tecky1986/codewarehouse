@@ -56,7 +56,7 @@ const elapsedLabel = computed(() => {
     j.elapsed_s != null
       ? j.elapsed_s
       : j.started_at
-        ? Math.max(0, (nowTick.value / 1000) - Number(j.started_at))
+        ? Math.max(0, nowTick.value / 1000 - Number(j.started_at))
         : 0;
   if (sec < 60) return `${Math.floor(sec)}s`;
   const m = Math.floor(sec / 60);
@@ -106,7 +106,13 @@ function stop() {
 function algoRow(name: string) {
   const list = job.value?.algorithms || [];
   const found = list.find((a) => typeof a !== "string" && a.name === name) as
-    | { name: string; progress?: number; eta_seconds?: number; timed_out?: boolean; done_ms?: number }
+    | {
+        name: string;
+        progress?: number;
+        eta_seconds?: number;
+        timed_out?: boolean;
+        done_ms?: number;
+      }
     | undefined;
   const progress =
     found?.progress != null
@@ -114,10 +120,7 @@ function algoRow(name: string) {
       : job.value?.progress?.[name] != null
         ? job.value!.progress![name]
         : 0;
-  const eta =
-    found?.eta_seconds != null
-      ? found.eta_seconds
-      : job.value?.eta_seconds?.[name];
+  const eta = found?.eta_seconds != null ? found.eta_seconds : job.value?.eta_seconds?.[name];
   return { progress, eta, timed_out: found?.timed_out, done_ms: found?.done_ms };
 }
 
@@ -288,8 +291,12 @@ function etaLabel(name: string) {
 }
 
 @keyframes sweep {
-  0% { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
 }
 
 .pct {

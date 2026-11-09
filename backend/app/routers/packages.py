@@ -3,7 +3,6 @@ from fastapi.responses import Response
 
 from app.deps import get_conn
 from app.encoding import content_disposition
-from app.errors import AppError
 from app.excel_io import export_packages, import_packages, package_template
 from app.repos import PackageMasterRepo
 from app.response import fail, ok
@@ -24,10 +23,7 @@ def list_packages(repo: PackageMasterRepo = Depends(_repo)):
 
 @router.post("")
 def create_package(body: dict, repo: PackageMasterRepo = Depends(_repo)):
-    try:
-        return ok(repo.create(body))
-    except AppError as e:
-        return fail(e.code, e.message, status=e.status)
+    return ok(repo.create(body))
 
 
 @router.get("/template")
@@ -59,10 +55,7 @@ def import_all(file: UploadFile = File(...), repo: PackageMasterRepo = Depends(_
         if item.get("l") is None or item.get("w") is None or item.get("h") is None:
             skipped += 1
             continue
-        try:
-            saved.append(repo.upsert(item))
-        except AppError as e:
-            return fail(e.code, e.message, status=e.status)
+        saved.append(repo.upsert(item))
     return ok({"saved": saved, "saved_count": len(saved), "skipped": skipped})
 
 
@@ -85,24 +78,15 @@ def batch_update_packages(body: dict = Body(...), repo: PackageMasterRepo = Depe
         if mapped is None:
             return fail("E_VALIDATION", "默认装卸仅支持 叉车 / 人工", status=422)
         patch["default_loading"] = mapped
-    try:
-        return ok(repo.batch_update(ids, patch))
-    except AppError as e:
-        return fail(e.code, e.message, status=e.status)
+    return ok(repo.batch_update(ids, patch))
 
 
 @router.put("/{pid}")
 def update_package(pid: int, body: dict, repo: PackageMasterRepo = Depends(_repo)):
-    try:
-        return ok(repo.update(pid, body))
-    except AppError as e:
-        return fail(e.code, e.message, status=e.status)
+    return ok(repo.update(pid, body))
 
 
 @router.delete("/{pid}")
 def delete_package(pid: int, repo: PackageMasterRepo = Depends(_repo)):
-    try:
-        repo.delete(pid)
-        return ok(True)
-    except AppError as e:
-        return fail(e.code, e.message, status=e.status)
+    repo.delete(pid)
+    return ok(True)

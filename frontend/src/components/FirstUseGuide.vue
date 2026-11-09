@@ -33,12 +33,7 @@ function stepState(n: number): "done" | "active" | "pending" {
       <span class="hint">按 4 步完成一次完整装箱流程</span>
     </div>
     <div class="steps">
-      <div
-        v-for="s in STEPS"
-        :key="s.n"
-        class="step"
-        :class="stepState(s.n)"
-      >
+      <div v-for="s in STEPS" :key="s.n" class="step" :class="stepState(s.n)">
         <span class="num">{{ s.n }}</span>
         <div class="body">
           <span class="label">{{ s.label }}</span>

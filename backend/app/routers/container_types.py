@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import Response
 
 from app.deps import get_conn
-from app.errors import AppError
 from app.excel_io import export_container_types, import_container_types
 from app.repos import ContainerTypeRepo
 from app.response import fail, ok
@@ -37,10 +36,7 @@ def create_type(body: dict, repo: ContainerTypeRepo = Depends(_repo)):
     err = _positive(body)
     if err:
         return fail("E_VALIDATION", err, status=422)
-    try:
-        return ok(repo.create(body))
-    except AppError as e:
-        return fail(e.code, e.message, status=e.status)
+    return ok(repo.create(body))
 
 
 @router.get("/export")
@@ -75,16 +71,10 @@ def update_type(cid: int, body: dict, repo: ContainerTypeRepo = Depends(_repo)):
         err = _positive(merged)
         if err:
             return fail("E_VALIDATION", err, status=422)
-    try:
-        return ok(repo.update(cid, body))
-    except AppError as e:
-        return fail(e.code, e.message, status=e.status)
+    return ok(repo.update(cid, body))
 
 
 @router.delete("/{cid}")
 def delete_type(cid: int, repo: ContainerTypeRepo = Depends(_repo)):
-    try:
-        repo.delete(cid)
-        return ok(True)
-    except AppError as e:
-        return fail(e.code, e.message, status=e.status)
+    repo.delete(cid)
+    return ok(True)

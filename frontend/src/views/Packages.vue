@@ -18,7 +18,8 @@ const batchBusy = ref(false);
 const searchQuery = ref("");
 
 // sort
-type SortField = "pn" | "name" | "l" | "w" | "h" | "gross" | "max_load" | "max_stack" | "default_loading";
+type SortField =
+  "pn" | "name" | "l" | "w" | "h" | "gross" | "max_load" | "max_stack" | "default_loading";
 const sortField = ref<SortField>("pn");
 const sortAsc = ref(true);
 
@@ -29,12 +30,13 @@ const currentPage = ref(1);
 const filtered = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
   if (!q) return items.value;
-  return items.value.filter((p) =>
-    (p.pn || "").toLowerCase().includes(q) ||
-    (p.name || "").toLowerCase().includes(q) ||
-    (p.package_type || "").toLowerCase().includes(q) ||
-    (p.cargo_type || "").toLowerCase().includes(q) ||
-    (p.default_loading || "").toLowerCase().includes(q)
+  return items.value.filter(
+    (p) =>
+      (p.pn || "").toLowerCase().includes(q) ||
+      (p.name || "").toLowerCase().includes(q) ||
+      (p.package_type || "").toLowerCase().includes(q) ||
+      (p.cargo_type || "").toLowerCase().includes(q) ||
+      (p.default_loading || "").toLowerCase().includes(q),
   );
 });
 
@@ -78,7 +80,9 @@ function sortIndicator(field: SortField): string {
   return sortAsc.value ? " ▲" : " ▼";
 }
 
-watch(searchQuery, () => { currentPage.value = 1; });
+watch(searchQuery, () => {
+  currentPage.value = 1;
+});
 
 const BATCH_FIELDS = [
   { key: "max_load", label: "每箱承重 kg", kind: "load" },
@@ -287,7 +291,9 @@ async function onImportFile() {
   importMsg.value = "";
   try {
     const result = await Packages.importFile(file);
-    importMsg.value = `已导入 ${result.saved_count} 条` + (result.skipped ? `，跳过 ${result.skipped} 条缺尺寸记录` : "");
+    importMsg.value =
+      `已导入 ${result.saved_count} 条` +
+      (result.skipped ? `，跳过 ${result.skipped} 条缺尺寸记录` : "");
     await load();
   } catch (e) {
     error.value = (e as Error).message;
@@ -310,7 +316,9 @@ onMounted(load);
       <div class="actions">
         <button @click="downloadTemplate">下载模板</button>
         <button @click="downloadExport">导出全部</button>
-        <button @click="importInput?.click()" :disabled="importing">{{ importing ? "导入中…" : "批量导入" }}</button>
+        <button @click="importInput?.click()" :disabled="importing">
+          {{ importing ? "导入中…" : "批量导入" }}
+        </button>
         <input
           type="file"
           ref="importInput"
@@ -374,17 +382,36 @@ onMounted(load);
         <label>箱重kg <input type="number" step="0.1" v-model.number="form.tare" /></label>
         <label>净重kg <input type="number" step="0.1" v-model.number="form.net" /></label>
         <label>毛重kg <input type="number" step="0.1" v-model.number="form.gross" /></label>
-        <label class="ck">四面进铲 <input type="checkbox" v-model="form.rotatable" :true-value="1" :false-value="0" /></label>
-        <label class="ck">同种堆叠 <input type="checkbox" v-model="form.same_type_stack" :true-value="1" :false-value="0" /></label>
-        <label>默认装卸
+        <label class="ck"
+          >四面进铲
+          <input type="checkbox" v-model="form.rotatable" :true-value="1" :false-value="0"
+        /></label>
+        <label class="ck"
+          >同种堆叠
+          <input type="checkbox" v-model="form.same_type_stack" :true-value="1" :false-value="0"
+        /></label>
+        <label
+          >默认装卸
           <select v-model="form.default_loading">
             <option value="叉车">叉车</option>
             <option value="人工">人工</option>
           </select>
         </label>
-        <label v-if="form.same_type_stack === 1">最大堆码层数 <input type="number" v-model.number="form.max_stack" /></label>
-        <label>每箱承重量kg <input type="number" step="0.1" v-model="form.max_load" min="0" placeholder="留空=不限；0=不可被压" /></label>
-        <label class="ck">启用 <input type="checkbox" v-model="form.enabled" :true-value="1" :false-value="0" /></label>
+        <label v-if="form.same_type_stack === 1"
+          >最大堆码层数 <input type="number" v-model.number="form.max_stack"
+        /></label>
+        <label
+          >每箱承重量kg
+          <input
+            type="number"
+            step="0.1"
+            v-model="form.max_load"
+            min="0"
+            placeholder="留空=不限；0=不可被压"
+        /></label>
+        <label class="ck"
+          >启用 <input type="checkbox" v-model="form.enabled" :true-value="1" :false-value="0"
+        /></label>
       </div>
       <div class="form-actions">
         <button class="primary" @click="save">保存</button>
@@ -406,14 +433,28 @@ onMounted(load);
       <table class="tbl">
         <thead>
           <tr>
-            <th class="chk"><input type="checkbox" :checked="allSelected" @change="toggleAll(($event.target as HTMLInputElement).checked)" /></th>
-            <th class="sortable" @click="toggleSort('pn')">PN{{ sortIndicator('pn') }}</th>
-            <th class="sortable" @click="toggleSort('name')">PackMatls{{ sortIndicator('name') }}</th>
-            <th class="sortable" @click="toggleSort('l')">尺寸 mm{{ sortIndicator('l') }}</th>
-            <th class="sortable" @click="toggleSort('gross')">毛重{{ sortIndicator('gross') }}</th>
-            <th class="sortable" @click="toggleSort('max_stack')">堆码层数{{ sortIndicator('max_stack') }}</th>
-            <th class="sortable" @click="toggleSort('max_load')">承重量{{ sortIndicator('max_load') }}</th>
-            <th class="sortable" @click="toggleSort('default_loading')">默认装卸{{ sortIndicator('default_loading') }}</th>
+            <th class="chk">
+              <input
+                type="checkbox"
+                :checked="allSelected"
+                @change="toggleAll(($event.target as HTMLInputElement).checked)"
+              />
+            </th>
+            <th class="sortable" @click="toggleSort('pn')">PN{{ sortIndicator("pn") }}</th>
+            <th class="sortable" @click="toggleSort('name')">
+              PackMatls{{ sortIndicator("name") }}
+            </th>
+            <th class="sortable" @click="toggleSort('l')">尺寸 mm{{ sortIndicator("l") }}</th>
+            <th class="sortable" @click="toggleSort('gross')">毛重{{ sortIndicator("gross") }}</th>
+            <th class="sortable" @click="toggleSort('max_stack')">
+              堆码层数{{ sortIndicator("max_stack") }}
+            </th>
+            <th class="sortable" @click="toggleSort('max_load')">
+              承重量{{ sortIndicator("max_load") }}
+            </th>
+            <th class="sortable" @click="toggleSort('default_loading')">
+              默认装卸{{ sortIndicator("default_loading") }}
+            </th>
             <th></th>
           </tr>
         </thead>
@@ -451,80 +492,323 @@ onMounted(load);
 
     <div class="pagination">
       <button :disabled="currentPage <= 1" @click="currentPage--">上一页</button>
-      <span class="page-info">第 {{ currentPage }} / {{ totalPages }} 页 · 共 {{ totalCount }} 条</span>
+      <span class="page-info"
+        >第 {{ currentPage }} / {{ totalPages }} 页 · 共 {{ totalCount }} 条</span
+      >
       <button :disabled="currentPage >= totalPages" @click="currentPage++">下一页</button>
     </div>
   </div>
 </template>
 
 <style scoped>
-.page { padding: 32px 40px; max-width: 980px; margin: 0 auto; }
-.top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
-h1 { font-size: 22px; font-weight: 500; color: #2c2c2c; margin: 0; }
-.sub { font-size: 13px; color: #888; margin: 6px 0 0; }
-button.primary { padding: 6px 18px; background: #1a5c38; color: #fff; border: none; border-radius: 4px; font-size: 14px; cursor: pointer; }
-.error { color: #c62828; font-size: 13px; margin: 0 0 12px; }
-.form-card { border: 1px solid #e8e4e0; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; background: #fff; }
-.form-card h2 { font-size: 15px; font-weight: 500; color: #444; margin: 0 0 12px; }
-.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.grid label { font-size: 13px; color: #555; display: flex; flex-direction: column; gap: 4px; }
-.grid label.ck { flex-direction: row; align-items: center; gap: 8px; }
-.grid input { padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
-.grid label.ck input { padding: 0; }
-.grid select { padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
-.form-actions { display: flex; gap: 8px; margin-top: 14px; }
-.form-actions button { padding: 6px 16px; border: 1px solid #ccc; border-radius: 4px; background: #fff; font-size: 14px; cursor: pointer; }
-.tbl { width: 100%; border-collapse: collapse; min-width: 760px; }
-.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-.tbl th { text-align: left; font-size: 13px; color: #888; font-weight: 500; padding: 8px 12px; border-bottom: 1px solid #e8e4e0; }
-.tbl td { padding: 10px 12px; font-size: 14px; color: #333; border-bottom: 1px solid #f0ede8; }
-.tbl .pn { font-weight: 600; color: #1a5c38; }
-.ops { display: flex; gap: 6px; }
-.ops button { padding: 3px 10px; border: 1px solid #ccc; border-radius: 4px; background: #fff; font-size: 12px; cursor: pointer; }
-.ops button.danger { color: #c62828; border-color: #c62828; }
-.actions button { padding: 6px 14px; border: 1px solid #ccc; border-radius: 4px; background: #fff; font-size: 14px; cursor: pointer; }
-.actions button.primary { background: #1a5c38; color: #fff; border-color: #1a5c38; }
-.actions button:disabled { opacity: 0.5; cursor: not-allowed; }
-.actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.hidden-input { display: none; }
-.ok-text { color: #1a5c38; font-size: 13px; margin: 0 0 12px; }
-.batch-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0 0 14px; padding: 10px 12px; background: #f7f5f2; border-radius: 6px; }
-.batch-count { font-size: 13px; color: #555; min-width: 72px; }
-.batch-bar select, .batch-input { padding: 5px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
-.batch-input { width: 180px; }
-.batch-bar button { padding: 5px 14px; }
-.tbl .chk { width: 28px; }
+.page {
+  padding: 32px 40px;
+  max-width: 980px;
+  margin: 0 auto;
+}
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+h1 {
+  font-size: 22px;
+  font-weight: 500;
+  color: #2c2c2c;
+  margin: 0;
+}
+.sub {
+  font-size: 13px;
+  color: #888;
+  margin: 6px 0 0;
+}
+button.primary {
+  padding: 6px 18px;
+  background: #1a5c38;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.error {
+  color: #c62828;
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+.form-card {
+  border: 1px solid #e8e4e0;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  background: #fff;
+}
+.form-card h2 {
+  font-size: 15px;
+  font-weight: 500;
+  color: #444;
+  margin: 0 0 12px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.grid label {
+  font-size: 13px;
+  color: #555;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.grid label.ck {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.grid input {
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+.grid label.ck input {
+  padding: 0;
+}
+.grid select {
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+.form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+.form-actions button {
+  padding: 6px 16px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 14px;
+  cursor: pointer;
+}
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+}
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.tbl th {
+  text-align: left;
+  font-size: 13px;
+  color: #888;
+  font-weight: 500;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e8e4e0;
+}
+.tbl td {
+  padding: 10px 12px;
+  font-size: 14px;
+  color: #333;
+  border-bottom: 1px solid #f0ede8;
+}
+.tbl .pn {
+  font-weight: 600;
+  color: #1a5c38;
+}
+.ops {
+  display: flex;
+  gap: 6px;
+}
+.ops button {
+  padding: 3px 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ops button.danger {
+  color: #c62828;
+  border-color: #c62828;
+}
+.actions button {
+  padding: 6px 14px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 14px;
+  cursor: pointer;
+}
+.actions button.primary {
+  background: #1a5c38;
+  color: #fff;
+  border-color: #1a5c38;
+}
+.actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.hidden-input {
+  display: none;
+}
+.ok-text {
+  color: #1a5c38;
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+.batch-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  background: #f7f5f2;
+  border-radius: 6px;
+}
+.batch-count {
+  font-size: 13px;
+  color: #555;
+  min-width: 72px;
+}
+.batch-bar select,
+.batch-input {
+  padding: 5px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.batch-input {
+  width: 180px;
+}
+.batch-bar button {
+  padding: 5px 14px;
+}
+.tbl .chk {
+  width: 28px;
+}
 
-.search-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; }
-.search-input { flex: 1; max-width: 420px; padding: 7px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
-.search-input:focus { outline: none; border-color: #1a5c38; }
-.search-result-hint { font-size: 12px; color: #888; white-space: nowrap; }
+.search-bar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.search-input {
+  flex: 1;
+  max-width: 420px;
+  padding: 7px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.search-input:focus {
+  outline: none;
+  border-color: #1a5c38;
+}
+.search-result-hint {
+  font-size: 12px;
+  color: #888;
+  white-space: nowrap;
+}
 
-.tbl th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
-.tbl th.sortable:hover { color: #1a5c38; }
+.tbl th.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.tbl th.sortable:hover {
+  color: #1a5c38;
+}
 
-.pagination { display: flex; gap: 10px; align-items: center; justify-content: center; margin-top: 14px; }
-.pagination button { padding: 4px 14px; border: 1px solid #ccc; border-radius: 4px; background: #fff; font-size: 13px; cursor: pointer; }
-.pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
-.pagination .page-info { font-size: 13px; color: #666; }
-.empty-hint { text-align: center; color: #999; padding: 24px; font-size: 14px; }
+.pagination {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 14px;
+}
+.pagination button {
+  padding: 4px 14px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+.pagination button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.pagination .page-info {
+  font-size: 13px;
+  color: #666;
+}
+.empty-hint {
+  text-align: center;
+  color: #999;
+  padding: 24px;
+  font-size: 14px;
+}
 
-:root[data-theme="dark"] .search-input { border-color: #444; background: #2a2a2a; color: #e8e8e8; }
-:root[data-theme="dark"] .search-input:focus { border-color: #3d8c64; }
-:root[data-theme="dark"] .tbl th.sortable:hover { color: #4dd0a0; }
-:root[data-theme="dark"] .pagination button { background: #2a2a2a; border-color: #444; color: #ccc; }
-:root[data-theme="dark"] .pagination .page-info { color: #888; }
-:root[data-theme="dark"] .empty-hint { color: #666; }
-:root[data-theme="dark"] .search-result-hint { color: #888; }
+:root[data-theme="dark"] .search-input {
+  border-color: #444;
+  background: #2a2a2a;
+  color: #e8e8e8;
+}
+:root[data-theme="dark"] .search-input:focus {
+  border-color: #3d8c64;
+}
+:root[data-theme="dark"] .tbl th.sortable:hover {
+  color: #4dd0a0;
+}
+:root[data-theme="dark"] .pagination button {
+  background: #2a2a2a;
+  border-color: #444;
+  color: #ccc;
+}
+:root[data-theme="dark"] .pagination .page-info {
+  color: #888;
+}
+:root[data-theme="dark"] .empty-hint {
+  color: #666;
+}
+:root[data-theme="dark"] .search-result-hint {
+  color: #888;
+}
 
 @media (max-width: 900px) {
-  .page { padding: 24px 24px 40px; }
-  .top { flex-direction: column; gap: 12px; }
-  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .page {
+    padding: 24px 24px 40px;
+  }
+  .top {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 720px) {
-  .page { padding: 16px 16px 32px; }
-  .grid { grid-template-columns: 1fr; }
+  .page {
+    padding: 16px 16px 32px;
+  }
+  .grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

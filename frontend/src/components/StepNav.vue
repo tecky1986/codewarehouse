@@ -43,13 +43,7 @@ function state(n: number): "active" | "done" | "todo" {
 
 <template>
   <nav class="step-nav" aria-label="任务配置进度">
-    <router-link
-      v-for="s in steps"
-      :key="s.n"
-      :to="s.to"
-      class="step"
-      :class="state(s.n)"
-    >
+    <router-link v-for="s in steps" :key="s.n" :to="s.to" class="step" :class="state(s.n)">
       <span class="num">{{ s.n }}</span>
       <span class="text">
         <span class="label">{{ s.label }}</span>
@@ -82,7 +76,9 @@ function state(n: number): "active" | "done" | "todo" {
   border-radius: 8px;
   text-decoration: none;
   color: #555;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .step:hover {

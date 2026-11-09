@@ -1,5 +1,3 @@
-from fastapi import Request
-
 from app.db import connect, init_schema
 from app.seed import seed_if_empty
 
@@ -32,7 +30,3 @@ def reset_conn_for_tests(path):
 
 def current_db_path():
     return _DB_PATH
-
-
-def conn_from_request(request: Request):
-    return request.app.state.conn

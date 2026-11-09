@@ -1,12 +1,5 @@
 <script setup lang="ts">
-import {
-  ref,
-  watch,
-  onMounted,
-  onBeforeUnmount,
-  nextTick,
-  computed,
-} from "vue";
+import { ref, watch, onMounted, onBeforeUnmount, nextTick, computed } from "vue";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import type { Placement, ContainerKpi } from "@/api";
@@ -40,9 +33,7 @@ let animId = 0;
 let playTimer: ReturnType<typeof setInterval> | null = null;
 let resizeObserver: ResizeObserver | null = null;
 
-const active = computed(
-  () => props.containers[activeIdx.value] ?? props.containers[0] ?? null,
-);
+const active = computed(() => props.containers[activeIdx.value] ?? props.containers[0] ?? null);
 
 const containerPlacements = computed(() => {
   if (!active.value) return [];
@@ -104,12 +95,9 @@ function buildScene() {
   controls.minDistance = 10;
   controls.maxDistance = 100000;
 
-  canvasEl.value.addEventListener(
-    "pointerdown",
-    (ev: PointerEvent) => {
-      onPointerDown(ev);
-    },
-  );
+  canvasEl.value.addEventListener("pointerdown", (ev: PointerEvent) => {
+    onPointerDown(ev);
+  });
   canvasEl.value.addEventListener("pointerup", onPointerUp);
   canvasEl.value.addEventListener("pointerleave", onPointerUp);
   canvasEl.value.addEventListener("wheel", onWheel, { passive: false });
@@ -144,11 +132,7 @@ function createBox(p: Placement) {
 
   // Place the cargo mesh so that dim_x runs along the container's long axis
   // (l), dim_z along the height axis (h), and dim_y along the width axis (w).
-  mesh.position.set(
-    p.x + dx / 2,
-    p.z + dz / 2,
-    p.y + dy / 2,
-  );
+  mesh.position.set(p.x + dx / 2, p.z + dz / 2, p.y + dy / 2);
 
   mesh.userData.importRowId = p.import_row_id;
   mesh.userData.p = p;
@@ -168,10 +152,7 @@ function buildContainer3D() {
   // vertical axis, and dim_y (cargo width) along the lateral axis.
   const geo = new THREE.BoxGeometry(L.l, L.h, L.w);
   const edges = new THREE.EdgesGeometry(geo);
-  const line = new THREE.LineSegments(
-    edges,
-    new THREE.LineBasicMaterial({ color: 0x888888 }),
-  );
+  const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x888888 }));
   line.position.set(L.l / 2, L.h / 2, L.w / 2);
   containerGroup.add(line);
 
@@ -203,10 +184,7 @@ function resetView() {
   centerOnBounds(shown, L);
 }
 
-function centerOnBounds(
-  placed: Placement[],
-  L: { l: number; w: number; h: number },
-) {
+function centerOnBounds(placed: Placement[], L: { l: number; w: number; h: number }) {
   if (!camera || !scene || !controls) return;
   const pts: THREE.Vector3[] = [];
   for (const p of placed) {
@@ -241,10 +219,7 @@ function highlight(p: Placement) {
   clearHighlight();
   if (!containerGroup) return;
   for (const obj of containerGroup.children) {
-    if (
-      obj instanceof THREE.Mesh &&
-      obj.userData.importRowId === p.import_row_id
-    ) {
+    if (obj instanceof THREE.Mesh && obj.userData.importRowId === p.import_row_id) {
       const w = (obj.geometry as THREE.BoxGeometry).parameters.width * 1.02;
       const h = (obj.geometry as THREE.BoxGeometry).parameters.height * 1.02;
       const d = (obj.geometry as THREE.BoxGeometry).parameters.depth * 1.02;
@@ -344,9 +319,7 @@ function onPointerDown(ev: PointerEvent) {
     const my = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(mx, my), camera!);
-    const meshes = containerGroup?.children.filter(
-      (c): c is THREE.Mesh => c instanceof THREE.Mesh,
-    );
+    const meshes = containerGroup?.children.filter((c): c is THREE.Mesh => c instanceof THREE.Mesh);
     const hits = raycaster.intersectObjects(meshes || []);
     if (hits.length > 0) {
       const p = hits[0].object.userData.p;
@@ -463,9 +436,7 @@ defineExpose({
       <canvas ref="canvasEl" class="canvas"></canvas>
       <div v-if="!active" class="empty">暂无集装箱</div>
       <div class="canvas-overlay">
-        <button @click="resetView" class="view-btn" title="复位视角">
-          复位视角
-        </button>
+        <button @click="resetView" class="view-btn" title="复位视角">复位视角</button>
         <button
           v-if="fullscreen"
           @click="toggleFullscreen"
@@ -478,18 +449,14 @@ defineExpose({
     </div>
 
     <div class="controls" :class="{ fullscreen }">
-      <button @click="stepBack" :disabled="playStep <= 0" title="上一步">
-        &lt;
-      </button>
+      <button @click="stepBack" :disabled="playStep <= 0" title="上一步">&lt;</button>
       <button @click="playing ? stopPlayback() : startPlayback()" :class="{ primary: true }">
         {{ playing ? "暂停" : "回放" }}
       </button>
       <button @click="stepForward" :disabled="playStep >= totalSteps - 1" title="下一步">
         &gt;
       </button>
-      <span class="step-label">
-        步 {{ playStep + 1 }} / {{ totalSteps }}
-      </span>
+      <span class="step-label"> 步 {{ playStep + 1 }} / {{ totalSteps }} </span>
 
       <label class="speed">
         倍速
@@ -505,10 +472,20 @@ defineExpose({
         <input type="checkbox" v-model="showAll" @change="rebuild" />
         全部
       </label>
-      <button @click="maximized = !maximized" :class="{ 'max-btn': true, active: maximized }" :title="maximized ? '退出最大化' : '最大化'" class="max-btn">
+      <button
+        @click="maximized = !maximized"
+        :class="{ 'max-btn': true, active: maximized }"
+        :title="maximized ? '退出最大化' : '最大化'"
+        class="max-btn"
+      >
         {{ maximized ? "还原" : "最大化" }}
       </button>
-      <button @click="toggleFullscreen" :class="{ 'max-btn': true, active: fullscreen }" :title="fullscreen ? '退出全屏' : '全屏'" class="max-btn">
+      <button
+        @click="toggleFullscreen"
+        :class="{ 'max-btn': true, active: fullscreen }"
+        :title="fullscreen ? '退出全屏' : '全屏'"
+        class="max-btn"
+      >
         {{ fullscreen ? "退出全屏" : "全屏" }}
       </button>
     </div>
@@ -517,9 +494,7 @@ defineExpose({
       <span class="pn">{{ selected.k_pn }}</span>
       <span>{{ selected.g_packmatls }}</span>
       <span>顺序 {{ selected.load_seq }}</span>
-      <span>
-        x={{ selected.x }} y={{ selected.y }} z={{ selected.z }}
-      </span>
+      <span> x={{ selected.x }} y={{ selected.y }} z={{ selected.z }} </span>
     </div>
   </div>
 </template>

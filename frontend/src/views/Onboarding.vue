@@ -42,9 +42,7 @@ const steps = [
     <div class="hero">
       <p class="eyebrow">首次使用引导</p>
       <h1>欢迎使用集装箱装箱工具</h1>
-      <p class="intro">
-        按以下步骤即可完成任务创建、样表导入、参数设置和方案计算。
-      </p>
+      <p class="intro">按以下步骤即可完成任务创建、样表导入、参数设置和方案计算。</p>
       <button class="primary" @click="router.push('/tasks')">开始使用</button>
     </div>
 

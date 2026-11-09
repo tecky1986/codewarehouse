@@ -145,16 +145,12 @@ const stepDone = computed(() => {
   if (preview.value?.site_auto_confirmed) done.push(2);
   return done;
 });
-const canContinue = computed(
-  () => (preview.value?.row_count || 0) > 0 && hasMode.value,
-);
+const canContinue = computed(() => (preview.value?.row_count || 0) > 0 && hasMode.value);
 const skipSite = computed(() => !!preview.value?.site_auto_confirmed);
 const nextPath = computed(() =>
   skipSite.value ? `/tasks/${tid.value}/rules` : `/tasks/${tid.value}/site`,
 );
-const nextLabel = computed(() =>
-  skipSite.value ? "下一步：规则配置" : "下一步：Site 确认",
-);
+const nextLabel = computed(() => (skipSite.value ? "下一步：规则配置" : "下一步：Site 确认"));
 const nextHint = computed(() => {
   if (!canContinue.value) return "完成导入与箱型设置后可继续。";
   if (skipSite.value) return "数据只有 1 个 Site（或未填 Site），已自动跳过 Site 确认。";
@@ -176,7 +172,7 @@ async function load() {
   let raw: Record<string, unknown> = {};
   try {
     const v = task.container_mode_json;
-    raw = typeof v === "string" ? JSON.parse(v || "{}") : (v || {});
+    raw = typeof v === "string" ? JSON.parse(v || "{}") : v || {};
   } catch {
     raw = {};
   }
@@ -347,7 +343,10 @@ onMounted(load);
     <div v-if="showGuide" class="guide-bar">
       <div class="guide-text">
         <strong>新任务配置指引</strong>
-        <span>按顺序完成：导入数据 → 设置箱型 → 检查导入结果 → 补齐缺失规格 → Site 确认（单 Site 自动跳过） → 规则 → 计算。</span>
+        <span
+          >按顺序完成：导入数据 → 设置箱型 → 检查导入结果 → 补齐缺失规格 → Site 确认（单 Site
+          自动跳过） → 规则 → 计算。</span
+        >
       </div>
       <button class="guide-close" @click="showGuide = false">知道了</button>
     </div>
@@ -361,12 +360,7 @@ onMounted(load);
         </div>
       </div>
       <div class="form-row">
-        <input
-          type="file"
-          ref="fileInput"
-          accept=".xlsx,.xls,.csv"
-          @change="onFileSelected"
-        />
+        <input type="file" ref="fileInput" accept=".xlsx,.xls,.csv" @change="onFileSelected" />
       </div>
       <p v-if="importing" class="hint">处理中…</p>
     </section>
@@ -420,18 +414,10 @@ onMounted(load);
                 <td><input type="checkbox" v-model="freemixTypeLock[t.code]" /></td>
                 <td>{{ t.code }}</td>
                 <td>
-                  <input
-                    v-model="freemixQtyLock[t.code]"
-                    placeholder="—"
-                    class="lock-input"
-                  />
+                  <input v-model="freemixQtyLock[t.code]" placeholder="—" class="lock-input" />
                 </td>
                 <td>
-                  <input
-                    v-model="freemixMaxQty[t.code]"
-                    placeholder="—"
-                    class="lock-input"
-                  />
+                  <input v-model="freemixMaxQty[t.code]" placeholder="—" class="lock-input" />
                 </td>
               </tr>
             </tbody>
@@ -454,7 +440,9 @@ onMounted(load);
         <span class="step-badge">3</span>
         <div>
           <h2>检查导入结果</h2>
-          <p class="section-hint">N 列导入时忽略；不完整行会标黄，便于快速定位。可导出已匹配主数据规格的完整表。</p>
+          <p class="section-hint">
+            N 列导入时忽略；不完整行会标黄，便于快速定位。可导出已匹配主数据规格的完整表。
+          </p>
         </div>
       </div>
       <div class="form-row" style="margin-bottom: 10px">
@@ -489,7 +477,9 @@ onMounted(load);
         <span class="step-badge">4</span>
         <div>
           <h2>补齐缺失规格</h2>
-          <p class="section-hint">缺失长宽高的行按 PN + PackMatls 匹配主数据。可下载待填表批量补全并写回主数据。</p>
+          <p class="section-hint">
+            缺失长宽高的行按 PN + PackMatls 匹配主数据。可下载待填表批量补全并写回主数据。
+          </p>
         </div>
       </div>
       <div class="form-row" style="margin-bottom: 12px">
@@ -505,7 +495,9 @@ onMounted(load);
         />
         <a class="link" href="/packages" target="_blank">打开包装主数据</a>
       </div>
-      <p class="hint">下载待填表 → 补全规格 → 上传后写入主数据并自动重新匹配。匹配键为 PN + PackMatls。</p>
+      <p class="hint">
+        下载待填表 → 补全规格 → 上传后写入主数据并自动重新匹配。匹配键为 PN + PackMatls。
+      </p>
       <div class="table-wrap" v-if="missing.length">
         <table class="tbl">
           <thead>
@@ -526,7 +518,10 @@ onMounted(load);
 
       <div v-if="suppKeys.length" class="supp-block">
         <h3 class="supp-title">未匹配主数据 · 一键补充</h3>
-        <p class="supp-hint">勾选需要补入主数据的键，填写规格（长/宽/高必填，cm 与 kg）后一键写入主数据并自动重新匹配，供以后任务复用。</p>
+        <p class="supp-hint">
+          勾选需要补入主数据的键，填写规格（长/宽/高必填，cm 与
+          kg）后一键写入主数据并自动重新匹配，供以后任务复用。
+        </p>
         <div class="table-wrap">
           <table class="supp-tbl">
             <thead>
@@ -560,7 +555,11 @@ onMounted(load);
           </table>
         </div>
         <div class="form-row" style="margin-top: 10px">
-          <button class="primary" @click="writeSupplement" :disabled="importing || selectedSuppKeys().length === 0">
+          <button
+            class="primary"
+            @click="writeSupplement"
+            :disabled="importing || selectedSuppKeys().length === 0"
+          >
             一键写入主数据（{{ selectedSuppKeys().length }} 条）
           </button>
           <span v-if="suppDone" class="ok-text">已写入主数据并重新匹配</span>
@@ -571,11 +570,7 @@ onMounted(load);
 
     <div class="next-bar">
       <span>{{ nextHint }}</span>
-      <router-link
-        v-if="canContinue"
-        :to="nextPath"
-        class="next-btn"
-      >
+      <router-link v-if="canContinue" :to="nextPath" class="next-btn">
         {{ nextLabel }}
       </router-link>
       <span v-else class="next-btn disabled">{{ nextLabel }}</span>
@@ -584,97 +579,412 @@ onMounted(load);
 </template>
 
 <style scoped>
-.page { padding: 32px 40px; max-width: 1200px; margin: 0 auto; }
-.top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
-h1 { font-size: 22px; font-weight: 500; color: #2c2c2c; margin: 0; }
-.sub { font-size: 13px; color: #888; margin: 6px 0 0; display: flex; align-items: center; gap: 8px; }
-.actions { display: flex; gap: 8px; align-items: center; }
-.section { margin-top: 28px; }
-.section-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
-.step-badge { flex: none; width: 22px; height: 22px; border-radius: 50%; background: #eef5f0; color: #1a5c38; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
-.section-head h2 { margin: 0; }
-.section-hint { font-size: 12px; color: #888; margin: 4px 0 0; line-height: 1.5; }
-.guide-bar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 14px 16px; border: 1px solid #d9e8df; background: #f4f9f6; border-radius: 8px; margin-bottom: 8px; }
-.guide-text { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #436652; line-height: 1.6; }
-.guide-text strong { font-size: 13px; color: #1a5c38; }
-.guide-close { flex: none; padding: 4px 12px; border: 1px solid #b9d2c4; border-radius: 4px; background: #fff; color: #1a5c38; font-size: 12px; cursor: pointer; }
-.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-.next-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 32px; padding: 14px 16px; border: 1px solid #e8e4e0; background: #fff; border-radius: 8px; font-size: 13px; color: #555; }
-.next-btn { flex: none; padding: 7px 16px; border-radius: 4px; background: #1a5c38; color: #fff; text-decoration: none; font-size: 13px; }
-.next-btn:hover { text-decoration: none; opacity: 0.9; }
-.next-btn.disabled { background: #e8e4e0; color: #999; }
-h2 { font-size: 16px; font-weight: 500; color: #444; margin: 0 0 12px; }
-.form-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.form-row select { padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
-.count { width: 60px; padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
-.hint-inline { font-size: 12px; color: #888; }
-button { padding: 6px 14px; border: 1px solid #ccc; border-radius: 4px; background: #fff; font-size: 14px; cursor: pointer; }
-button.primary { background: #1a5c38; color: #fff; border-color: #1a5c38; }
-button.primary:disabled { opacity: 0.4; cursor: not-allowed; }
-button:disabled { opacity: 0.4; cursor: not-allowed; }
-a.ghost { color: #888; text-decoration: none; font-size: 14px; }
-a.link { font-size: 13px; color: #1a5c38; text-decoration: none; }
-a.link:hover { text-decoration: underline; }
-.hidden-input { display: none; }
-.badge { font-size: 11px; padding: 1px 8px; border-radius: 3px; }
-.badge.ok { background: #e8f5e9; color: #1a5c38; }
-.badge.no { background: #fde8e8; color: #c62828; }
-.hint { font-size: 13px; color: #888; margin: 8px 0 0; }
-.error { color: #c62828; font-size: 13px; margin: 0 0 8px; }
-.error.inline { margin: 8px 0 0; }
-.ok-text { font-size: 14px; color: #1a5c38; margin: 0; }
-.map-tbl { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 1080px; }
-.map-tbl th { text-align: left; color: #888; font-weight: 500; padding: 6px 8px; border-bottom: 1px solid #e8e4e0; white-space: nowrap; }
-.map-tbl td { padding: 6px 8px; color: #333; border-bottom: 1px solid #f0ede8; white-space: nowrap; }
-.map-tbl tr.incomplete td { background: #fff8e1; }
-.map-tbl .na { color: #bbb; }
+.page {
+  padding: 32px 40px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+h1 {
+  font-size: 22px;
+  font-weight: 500;
+  color: #2c2c2c;
+  margin: 0;
+}
+.sub {
+  font-size: 13px;
+  color: #888;
+  margin: 6px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.section {
+  margin-top: 28px;
+}
+.section-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.step-badge {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #eef5f0;
+  color: #1a5c38;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+.section-head h2 {
+  margin: 0;
+}
+.section-hint {
+  font-size: 12px;
+  color: #888;
+  margin: 4px 0 0;
+  line-height: 1.5;
+}
+.guide-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid #d9e8df;
+  background: #f4f9f6;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+.guide-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: #436652;
+  line-height: 1.6;
+}
+.guide-text strong {
+  font-size: 13px;
+  color: #1a5c38;
+}
+.guide-close {
+  flex: none;
+  padding: 4px 12px;
+  border: 1px solid #b9d2c4;
+  border-radius: 4px;
+  background: #fff;
+  color: #1a5c38;
+  font-size: 12px;
+  cursor: pointer;
+}
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.next-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 32px;
+  padding: 14px 16px;
+  border: 1px solid #e8e4e0;
+  background: #fff;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #555;
+}
+.next-btn {
+  flex: none;
+  padding: 7px 16px;
+  border-radius: 4px;
+  background: #1a5c38;
+  color: #fff;
+  text-decoration: none;
+  font-size: 13px;
+}
+.next-btn:hover {
+  text-decoration: none;
+  opacity: 0.9;
+}
+.next-btn.disabled {
+  background: #e8e4e0;
+  color: #999;
+}
+h2 {
+  font-size: 16px;
+  font-weight: 500;
+  color: #444;
+  margin: 0 0 12px;
+}
+.form-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.form-row select {
+  padding: 6px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+.count {
+  width: 60px;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+.hint-inline {
+  font-size: 12px;
+  color: #888;
+}
+button {
+  padding: 6px 14px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 14px;
+  cursor: pointer;
+}
+button.primary {
+  background: #1a5c38;
+  color: #fff;
+  border-color: #1a5c38;
+}
+button.primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+a.ghost {
+  color: #888;
+  text-decoration: none;
+  font-size: 14px;
+}
+a.link {
+  font-size: 13px;
+  color: #1a5c38;
+  text-decoration: none;
+}
+a.link:hover {
+  text-decoration: underline;
+}
+.hidden-input {
+  display: none;
+}
+.badge {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 3px;
+}
+.badge.ok {
+  background: #e8f5e9;
+  color: #1a5c38;
+}
+.badge.no {
+  background: #fde8e8;
+  color: #c62828;
+}
+.hint {
+  font-size: 13px;
+  color: #888;
+  margin: 8px 0 0;
+}
+.error {
+  color: #c62828;
+  font-size: 13px;
+  margin: 0 0 8px;
+}
+.error.inline {
+  margin: 8px 0 0;
+}
+.ok-text {
+  font-size: 14px;
+  color: #1a5c38;
+  margin: 0;
+}
+.map-tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  min-width: 1080px;
+}
+.map-tbl th {
+  text-align: left;
+  color: #888;
+  font-weight: 500;
+  padding: 6px 8px;
+  border-bottom: 1px solid #e8e4e0;
+  white-space: nowrap;
+}
+.map-tbl td {
+  padding: 6px 8px;
+  color: #333;
+  border-bottom: 1px solid #f0ede8;
+  white-space: nowrap;
+}
+.map-tbl tr.incomplete td {
+  background: #fff8e1;
+}
+.map-tbl .na {
+  color: #bbb;
+}
 
 /* --- container mode picker --- */
-.mode-toggle { display: flex; gap: 4px; margin-bottom: 12px; }
+.mode-toggle {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
 .mode-toggle label {
-  display: flex; align-items: center; gap: 6px;
-  padding: 4px 12px; border: 1px solid #ccc; border-radius: 4px;
-  font-size: 14px; cursor: pointer; color: #333;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  color: #333;
 }
-.mode-toggle label.active { background: #1a5c38; color: #fff; border-color: #1a5c38; }
-.mode-toggle label.active input { accent-color: #fff; }
+.mode-toggle label.active {
+  background: #1a5c38;
+  color: #fff;
+  border-color: #1a5c38;
+}
+.mode-toggle label.active input {
+  accent-color: #fff;
+}
 .mode-body {
-  border: 1px solid #e8e4e0; border-radius: 6px;
-  padding: 12px 16px; background: #faf8f6;
+  border: 1px solid #e8e4e0;
+  border-radius: 6px;
+  padding: 12px 16px;
+  background: #faf8f6;
 }
-.mode-tbl { width: 100%; border-collapse: collapse; margin-top: 8px; min-width: 520px; }
+.mode-tbl {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+  min-width: 520px;
+}
 .mode-tbl th {
-  text-align: left; font-size: 13px; color: #888; font-weight: 500;
-  padding: 6px 10px; border-bottom: 1px solid #e8e4e0;
+  text-align: left;
+  font-size: 13px;
+  color: #888;
+  font-weight: 500;
+  padding: 6px 10px;
+  border-bottom: 1px solid #e8e4e0;
 }
-.mode-tbl td { padding: 6px 10px; font-size: 14px; color: #333; }
-.mode-tbl input[type="number"], .lock-input {
-  width: 60px; padding: 4px 8px;
-  border: 1px solid #ccc; border-radius: 4px; font-size: 14px;
+.mode-tbl td {
+  padding: 6px 10px;
+  font-size: 14px;
+  color: #333;
 }
-.tbl { width: 100%; border-collapse: collapse; min-width: 360px; }
-.tbl th { text-align: left; font-size: 13px; color: #888; font-weight: 500; padding: 8px 10px; border-bottom: 1px solid #e8e4e0; }
-.tbl td { padding: 8px 10px; font-size: 14px; color: #333; border-bottom: 1px solid #f0ede8; }
+.mode-tbl input[type="number"],
+.lock-input {
+  width: 60px;
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+}
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 360px;
+}
+.tbl th {
+  text-align: left;
+  font-size: 13px;
+  color: #888;
+  font-weight: 500;
+  padding: 8px 10px;
+  border-bottom: 1px solid #e8e4e0;
+}
+.tbl td {
+  padding: 8px 10px;
+  font-size: 14px;
+  color: #333;
+  border-bottom: 1px solid #f0ede8;
+}
 
-.supp-block { margin-top: 16px; padding-top: 12px; border-top: 1px solid #f0ede8; }
-.supp-title { font-size: 14px; font-weight: 500; color: #2c2c2c; margin: 0 0 6px; }
-.supp-hint { font-size: 12px; color: #888; margin: 0 0 10px; line-height: 1.5; }
-.supp-tbl { width: 100%; border-collapse: collapse; min-width: 720px; }
-.supp-tbl th { text-align: left; font-size: 12px; color: #888; font-weight: 500; padding: 6px 8px; border-bottom: 1px solid #e8e4e0; }
-.supp-tbl td { padding: 6px 8px; font-size: 14px; color: #333; border-bottom: 1px solid #f0ede8; }
-.supp-input { width: 72px; padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
+.supp-block {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #f0ede8;
+}
+.supp-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #2c2c2c;
+  margin: 0 0 6px;
+}
+.supp-hint {
+  font-size: 12px;
+  color: #888;
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+.supp-tbl {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 720px;
+}
+.supp-tbl th {
+  text-align: left;
+  font-size: 12px;
+  color: #888;
+  font-weight: 500;
+  padding: 6px 8px;
+  border-bottom: 1px solid #e8e4e0;
+}
+.supp-tbl td {
+  padding: 6px 8px;
+  font-size: 14px;
+  color: #333;
+  border-bottom: 1px solid #f0ede8;
+}
+.supp-input {
+  width: 72px;
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 13px;
+}
 
 @media (max-width: 900px) {
-  .page { padding: 24px 24px 40px; }
-  .top { flex-direction: column; gap: 12px; }
+  .page {
+    padding: 24px 24px 40px;
+  }
+  .top {
+    flex-direction: column;
+    gap: 12px;
+  }
 }
 
 @media (max-width: 720px) {
-  .page { padding: 16px 16px 32px; }
-  .actions { flex-wrap: wrap; }
-  .guide-bar { flex-direction: column; gap: 10px; }
-  .guide-close { align-self: flex-start; }
-  .next-bar { flex-direction: column; align-items: stretch; gap: 10px; }
-  .next-btn { text-align: center; }
+  .page {
+    padding: 16px 16px 32px;
+  }
+  .actions {
+    flex-wrap: wrap;
+  }
+  .guide-bar {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .guide-close {
+    align-self: flex-start;
+  }
+  .next-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .next-btn {
+    text-align: center;
+  }
 }
 </style>

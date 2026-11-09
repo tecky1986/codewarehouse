@@ -81,19 +81,21 @@ function sortIndicator(field: SortField): string {
   return sortAsc.value ? " ▲" : " ▼";
 }
 
-watch([searchQuery, statusFilter], () => { currentPage.value = 1; });
+watch([searchQuery, statusFilter], () => {
+  currentPage.value = 1;
+});
 
 function statusLabel(t: Task): string {
   return STATUS_LABEL[t.status || "draft"] || t.status || "草稿";
 }
-
 
 function taskHref(t: Task): string {
   const status = t.status || "draft";
   if (status === "draft") return `/tasks/${t.id}/import?guide=1`;
   if (status === "configuring") return `/tasks/${t.id}/import?guide=1`;
   if (status === "ready") return `/tasks/${t.id}#compute`;
-  if (status === "computing" || status === "completed" || status === "failed") return `/tasks/${t.id}`;
+  if (status === "computing" || status === "completed" || status === "failed")
+    return `/tasks/${t.id}`;
   return `/tasks/${t.id}/import?guide=1`;
 }
 
@@ -101,7 +103,7 @@ const modeLabel = computed(() => (t: Task) => {
   let m: Record<string, unknown> = {};
   try {
     const v = t.container_mode_json;
-    m = typeof v === "string" ? JSON.parse(v || "{}") : (v || {});
+    m = typeof v === "string" ? JSON.parse(v || "{}") : v || {};
   } catch {
     m = {};
   }
@@ -176,11 +178,7 @@ onMounted(load);
         <p class="sub">新建后按「导入数据 → 设置箱型 → Site 确认 → 规则 → 计算」逐步完成。</p>
       </div>
       <div class="create-row">
-        <input
-          v-model="newTaskName"
-          placeholder="新任务名称"
-          @keyup.enter="createTask"
-        />
+        <input v-model="newTaskName" placeholder="新任务名称" @keyup.enter="createTask" />
         <button class="primary" @click="createTask" :disabled="!newTaskName.trim() || creating">
           {{ creating ? "创建中…" : "新建并配置" }}
         </button>
@@ -200,18 +198,24 @@ onMounted(load);
         <option value="all">全部状态</option>
         <option v-for="s in STATUS_OPTIONS" :key="s.value" :value="s.value">{{ s.label }}</option>
       </select>
-      <span v-if="searchQuery || statusFilter !== 'all'" class="filter-hint">共 {{ totalCount }} 条结果</span>
+      <span v-if="searchQuery || statusFilter !== 'all'" class="filter-hint"
+        >共 {{ totalCount }} 条结果</span
+      >
     </div>
 
     <div v-if="tasks.length" class="table-wrap">
       <table class="tbl">
         <thead>
           <tr>
-            <th class="sortable" @click="toggleSort('id')">ID{{ sortIndicator('id') }}</th>
-            <th class="sortable" @click="toggleSort('name')">名称{{ sortIndicator('name') }}</th>
-            <th class="sortable" @click="toggleSort('status')">状态{{ sortIndicator('status') }}</th>
+            <th class="sortable" @click="toggleSort('id')">ID{{ sortIndicator("id") }}</th>
+            <th class="sortable" @click="toggleSort('name')">名称{{ sortIndicator("name") }}</th>
+            <th class="sortable" @click="toggleSort('status')">
+              状态{{ sortIndicator("status") }}
+            </th>
             <th>箱型</th>
-            <th class="sortable" @click="toggleSort('created_at')">创建{{ sortIndicator('created_at') }}</th>
+            <th class="sortable" @click="toggleSort('created_at')">
+              创建{{ sortIndicator("created_at") }}
+            </th>
             <th></th>
           </tr>
         </thead>
@@ -227,7 +231,9 @@ onMounted(load);
             <td>{{ modeLabel(t) }}</td>
             <td>{{ t.created_at ? t.created_at.replace("T", " ").slice(0, 16) : "" }}</td>
             <td class="ops">
-              <router-link :to="taskHref(t)" class="cfg">{{ t.status === "completed" ? "查看" : "继续配置" }}</router-link>
+              <router-link :to="taskHref(t)" class="cfg">{{
+                t.status === "completed" ? "查看" : "继续配置"
+              }}</router-link>
               <button @click="removeTask(t)" class="danger">删除</button>
             </td>
           </tr>
@@ -240,7 +246,9 @@ onMounted(load);
 
     <div v-if="tasks.length && totalPages > 1" class="pagination">
       <button :disabled="currentPage <= 1" @click="currentPage--">上一页</button>
-      <span class="page-info">第 {{ currentPage }} / {{ totalPages }} 页 · 共 {{ totalCount }} 条</span>
+      <span class="page-info"
+        >第 {{ currentPage }} / {{ totalPages }} 页 · 共 {{ totalCount }} 条</span
+      >
       <button :disabled="currentPage >= totalPages" @click="currentPage++">下一页</button>
     </div>
 
@@ -356,7 +364,10 @@ button.primary:disabled {
   color: #1a5c38;
   text-decoration: none;
 }
-.ops .cfg:hover { background: #eef5f0; text-decoration: none; }
+.ops .cfg:hover {
+  background: #eef5f0;
+  text-decoration: none;
+}
 .ops button {
   padding: 3px 10px;
   border: 1px solid #ccc;
@@ -379,11 +390,26 @@ button.primary:disabled {
   background: #f0ede8;
   color: #666;
 }
-.status.configuring { background: #eef5f0; color: #1a5c38; }
-.status.ready { background: #fff8e1; color: #8a6d1b; }
-.status.computing { background: #e8f0fe; color: #1a4a8c; }
-.status.completed { background: #e8f5e9; color: #1a5c38; }
-.status.failed { background: #fde8e8; color: #c62828; }
+.status.configuring {
+  background: #eef5f0;
+  color: #1a5c38;
+}
+.status.ready {
+  background: #fff8e1;
+  color: #8a6d1b;
+}
+.status.computing {
+  background: #e8f0fe;
+  color: #1a4a8c;
+}
+.status.completed {
+  background: #e8f5e9;
+  color: #1a5c38;
+}
+.status.failed {
+  background: #fde8e8;
+  color: #c62828;
+}
 
 a {
   color: #1a5c38;

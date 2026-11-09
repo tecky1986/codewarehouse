@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -10,6 +11,8 @@ from app.deps import get_conn
 from app.errors import AppError
 from app.response import fail, ok
 from app.routers import container_types, export, packages, plans, settings, tasks
+
+logger = logging.getLogger("container_packing")
 
 
 @asynccontextmanager
@@ -43,7 +46,8 @@ async def validation_handler(_request: Request, exc: RequestValidationError):
 
 
 @app.exception_handler(Exception)
-async def unhandled_handler(_request: Request, exc: Exception):
+async def unhandled_handler(request: Request, exc: Exception):
+    logger.exception("unhandled error on %s %s", request.method, request.url.path, exc_info=exc)
     return fail("E_ENGINE", "服务器内部错误", status=500)
 
 

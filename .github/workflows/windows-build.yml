@@ -1,19 +1,15 @@
-name: Windows executable
+name: Branch checks
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - "**"
-    tags:
-      - "v*"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   check:
-    if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -33,10 +29,12 @@ jobs:
           date="$(date +%Y-%m-%d)"
           printf '{\n  "version": "%s",\n  "date": "%s"\n}\n' "$version" "$date" > release_meta.json
 
-      - name: Test and build frontend
+      - name: Lint and build frontend
         working-directory: frontend
         run: |
           npm ci
+          npm run lint
+          npm run format:check
           npm test
           npm run typecheck
           npm run build
@@ -44,116 +42,10 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       - name: Run backend tests
         working-directory: backend
         run: |
           python -m pip install -r requirements.txt
           python -m pytest -q
-
-  build:
-    if: >-
-      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
-      || github.event_name == 'workflow_dispatch'
-    runs-on: windows-latest
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Update release metadata
-        shell: bash
-        run: |
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            version="${GITHUB_REF#refs/tags/}"
-          else
-            version="${GITHUB_REF_NAME}-dev"
-          fi
-          date="$(date +%Y-%m-%d)"
-          printf '{\n  "version": "%s",\n  "date": "%s"\n}\n' "$version" "$date" > release_meta.json
-
-      - name: Test and build frontend
-        working-directory: frontend
-        run: |
-          npm ci
-          npm test
-          npm run typecheck
-          npm run build
-
-      - name: Install backend and packager dependencies
-        run: python -m pip install -r backend/requirements.txt pyinstaller
-
-      - name: Run backend tests
-        working-directory: backend
-        run: python -m pytest -q
-
-      - name: Assemble static assets
-        shell: pwsh
-        run: |
-          if (Test-Path backend/static) { Remove-Item backend/static -Recurse -Force }
-          Copy-Item frontend/dist backend/static -Recurse
-
-      - name: Package Windows application
-        run: python -m PyInstaller container_packing.spec --clean -y
-
-      - name: Strip Python sources and zip
-        shell: pwsh
-        run: |
-          if (-not (Test-Path dist/container_packing/container_packing.exe)) {
-            throw "PyInstaller did not produce the expected executable."
-          }
-          $metaVersion = 'dev'
-          $metaDate = Get-Date -Format 'yyyy-MM-dd'
-          if (Test-Path 'release_meta.json') {
-            $meta = Get-Content 'release_meta.json' -Raw | ConvertFrom-Json
-            if ($meta.version -and $meta.version -ne 'dev') {
-              $metaVersion = $meta.version
-            }
-            if ($meta.date) {
-              $metaDate = $meta.date
-            }
-          }
-          Get-ChildItem dist/container_packing -Recurse -Include *.py,*.pyi,*.pyx | Remove-Item -Force
-          @"
-          集装箱装箱工具 Windows 版 ${metaVersion}（${metaDate}）
-
-          1. 解压本压缩包
-          2. 双击 container_packing.exe
-          3. 浏览器会自动打开本地页面（数据保存在 %USERPROFILE%\.container-packing）
-
-          本包不含 Python 源码，请勿移动 _internal 目录。
-          "@ | Set-Content -Encoding UTF8 dist/container_packing/使用说明.txt
-          $timestamp = Get-Date -Format "yyyyMMdd-HHmm"
-          $zipName = "container-packing-windows-x64-$timestamp.zip"
-          Compress-Archive -Path dist/container_packing -DestinationPath $zipName -Force
-          Write-Output "Created: $zipName"
-
-      - name: Upload zip artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: container-packing-windows-x64
-          path: container-packing-windows-x64-*.zip
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            container-packing-windows-x64-*.zip
-          generate_release_notes: true
-          body: |
-            Windows 可执行包（不含源码）。解压后运行 `container_packing.exe`。

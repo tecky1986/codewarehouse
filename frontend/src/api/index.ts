@@ -39,8 +39,7 @@ export const Tasks = {
     req<Task>("/api/tasks", { method: "POST", body: JSON.stringify({ name }) }),
   update: (id: number, body: Record<string, unknown>) =>
     req<Task>(`/api/tasks/${id}`, { method: "PUT", body: JSON.stringify(body) }),
-  remove: (id: number) =>
-    req<null>(`/api/tasks/${id}`, { method: "DELETE" }),
+  remove: (id: number) => req<null>(`/api/tasks/${id}`, { method: "DELETE" }),
   compute: (id: number, body: { algorithms: string[] }) =>
     req<Job>(`/api/tasks/${id}/compute`, {
       method: "POST",
@@ -52,8 +51,7 @@ export const Tasks = {
       method: "PUT",
       body: JSON.stringify({ plan_id: planId }),
     }),
-  clearRuns: (id: number) =>
-    req<null>(`/api/tasks/${id}/runs`, { method: "DELETE" }),
+  clearRuns: (id: number) => req<null>(`/api/tasks/${id}/runs`, { method: "DELETE" }),
   importFile: async (id: number, file: File) => {
     const form = new FormData();
     form.append("file", file);
@@ -196,8 +194,7 @@ export interface Placement {
 
 export const Plans = {
   placements: (id: number) => req<Placement[]>(`/api/plans/${id}/placements`),
-  exportUrl: (id: number, fmt: "xlsx" | "csv" = "xlsx") =>
-    `/api/plans/${id}/export?fmt=${fmt}`,
+  exportUrl: (id: number, fmt: "xlsx" | "csv" = "xlsx") => `/api/plans/${id}/export?fmt=${fmt}`,
 };
 
 // ---- import preview
@@ -329,14 +326,11 @@ export const ExportTemplates = {
       method: "PUT",
       body: JSON.stringify({
         name: body.name,
-        ...(body.columns !== undefined
-          ? { columns_json: JSON.stringify(body.columns) }
-          : {}),
+        ...(body.columns !== undefined ? { columns_json: JSON.stringify(body.columns) } : {}),
         ...(body.is_default !== undefined ? { is_default: body.is_default } : {}),
       }),
     }),
-  remove: (id: number) =>
-    req<null>(`/api/export-templates/${id}`, { method: "DELETE" }),
+  remove: (id: number) => req<null>(`/api/export-templates/${id}`, { method: "DELETE" }),
 };
 
 // ---- container types
@@ -371,8 +365,7 @@ export const ContainerTypes = {
       method: "PUT",
       body: JSON.stringify(body),
     }),
-  remove: (id: number) =>
-    req<null>(`/api/container-types/${id}`, { method: "DELETE" }),
+  remove: (id: number) => req<null>(`/api/container-types/${id}`, { method: "DELETE" }),
 };
 
 // ---- packages
@@ -409,8 +402,7 @@ export const Packages = {
       method: "PUT",
       body: JSON.stringify(body),
     }),
-  remove: (id: number) =>
-    req<null>(`/api/packages/${id}`, { method: "DELETE" }),
+  remove: (id: number) => req<null>(`/api/packages/${id}`, { method: "DELETE" }),
   batchUpdate: (ids: number[], fields: Partial<PackageMaster>) =>
     req<PackageMaster[]>("/api/packages/batch", {
       method: "POST",

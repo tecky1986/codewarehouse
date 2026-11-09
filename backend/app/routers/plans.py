@@ -3,7 +3,6 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends
 
 from app.deps import get_conn, current_db_path
-from app.errors import AppError, ConflictError, NotFoundError
 from app.jobs import JobsService, get_job_state, run_status_from_db
 from app.repos import TaskRepo
 from app.response import fail, ok
@@ -33,10 +32,7 @@ def compute(
 ):
     if not isinstance(body, dict):
         body = {}
-    try:
-        job = jobs.start(tid, body)
-    except AppError as e:
-        return fail(e.code, e.message, status=e.status)
+    job = jobs.start(tid, body)
     return ok(job.as_dict())
 
 

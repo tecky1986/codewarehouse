@@ -95,10 +95,7 @@ def create_template(
     body: Any = Body(...),
     repo: ExportTemplateRepo = Depends(_template_repo),
 ):
-    try:
-        t = repo.create(body)
-    except AppError as e:
-        return fail(e.code, e.message, status=e.status)
+    t = repo.create(body)
     t["columns_json"] = _load_cols(t.get("columns_json"))
     return ok(t)
 
@@ -111,10 +108,7 @@ def update_template(
 ):
     if "columns_json" in body and isinstance(body.get("columns_json"), str):
         body["columns_json"] = _load_cols(body["columns_json"])
-    try:
-        t = repo.update(tid, body)
-    except AppError as e:
-        return fail(e.code, e.message, status=e.status)
+    t = repo.update(tid, body)
     t["columns_json"] = _load_cols(t.get("columns_json"))
     return ok(t)
 
@@ -124,8 +118,5 @@ def delete_template(
     tid: int,
     repo: ExportTemplateRepo = Depends(_template_repo),
 ):
-    try:
-        repo.delete(tid)
-        return ok(True)
-    except AppError as e:
-        return fail(e.code, e.message, status=e.status)
+    repo.delete(tid)
+    return ok(True)

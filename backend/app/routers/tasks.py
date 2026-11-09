@@ -62,27 +62,18 @@ def create_task(body: dict, repo: TaskRepo = Depends(_task_repo)):
 
 @router.get("/{tid}")
 def get_task(tid: int, repo: TaskRepo = Depends(_task_repo)):
-    try:
-        return ok(repo.get(tid))
-    except AppError as e:
-        return fail(e.code, e.message, status=e.status)
+    return ok(repo.get(tid))
 
 
 @router.put("/{tid}")
 def update_task(tid: int, body: dict, repo: TaskRepo = Depends(_task_repo)):
-    try:
-        return ok(repo.update(tid, body))
-    except AppError as e:
-        return fail(e.code, e.message, status=e.status)
+    return ok(repo.update(tid, body))
 
 
 @router.delete("/{tid}")
 def delete_task(tid: int, repo: TaskRepo = Depends(_task_repo)):
-    try:
-        repo.delete(tid)
-        return ok(True)
-    except AppError as e:
-        return fail(e.code, e.message, status=e.status)
+    repo.delete(tid)
+    return ok(True)
 
 
 @router.post("/{tid}/import")
@@ -93,14 +84,11 @@ def import_task(
 ):
     TaskRepo(conn).get(tid)
     content = file.file.read()
-    try:
-        raw = rows_from_file(file.filename or "", content)
-        mapped = map_raw_rows(raw)
-        rows = complete_rows(conn, mapped)
-        ImportRowRepo(conn).replace_for_task(tid, rows)
-        return ok(preview_payload(rows))
-    except AppError as e:
-        return fail(e.code, e.message, status=e.status)
+    raw = rows_from_file(file.filename or "", content)
+    mapped = map_raw_rows(raw)
+    rows = complete_rows(conn, mapped)
+    ImportRowRepo(conn).replace_for_task(tid, rows)
+    return ok(preview_payload(rows))
 
 
 @router.get("/{tid}/import/preview")
