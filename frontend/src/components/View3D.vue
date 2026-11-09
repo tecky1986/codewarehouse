@@ -13,6 +13,7 @@ const emit = defineEmits<{
   (e: "select", p: Placement | null): void;
 }>();
 
+const wrapEl = ref<HTMLDivElement>();
 const canvasEl = ref<HTMLCanvasElement>();
 const activeIdx = ref(0);
 const selected = ref<Placement | null>(null);
@@ -64,9 +65,9 @@ function dims(): { l: number; w: number; h: number } {
 }
 
 function buildScene() {
-  if (!canvasEl.value) return;
-  const w = canvasEl.value.clientWidth || 800;
-  const h = canvasEl.value.clientHeight || 500;
+  if (!wrapEl.value || !canvasEl.value) return;
+  const w = wrapEl.value.clientWidth || 800;
+  const h = wrapEl.value.clientHeight || 500;
 
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0xf5f3f0);
@@ -347,13 +348,13 @@ function onWheel(ev: WheelEvent) {
 }
 
 function onResize() {
-  if (!canvasEl.value || !renderer || !camera) return;
-  const w = canvasEl.value.clientWidth;
-  const h = canvasEl.value.clientHeight;
+  if (!wrapEl.value || !renderer || !camera) return;
+  const w = wrapEl.value.clientWidth;
+  const h = wrapEl.value.clientHeight;
   if (w === 0 || h === 0) return;
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
-  renderer.setSize(w, h);
+  renderer.setSize(w, h, false);
 }
 
 function toggleFullscreen() {
@@ -377,9 +378,9 @@ onMounted(async () => {
   await nextTick();
   buildScene();
   resetView();
-  if (canvasEl.value) {
+  if (wrapEl.value) {
     resizeObserver = new ResizeObserver(() => onResize());
-    resizeObserver.observe(canvasEl.value);
+    resizeObserver.observe(wrapEl.value);
   }
 });
 
@@ -429,6 +430,7 @@ defineExpose({
     </div>
 
     <div
+      ref="wrapEl"
       class="canvas-wrap"
       :class="{ maximized, fullscreen }"
       @fullscreenchange="onFullscreenChange"
@@ -599,6 +601,8 @@ defineExpose({
 }
 
 .canvas {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   display: block;
