@@ -1,0 +1,35 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to server via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            DEPLOY_DIR="/www/container/codewarehouse"
+
+            cd "$DEPLOY_DIR"
+
+            # 确保在 main 分支
+            git checkout main 2>/dev/null || git checkout -b main origin/main
+
+            # 拉取最新代码
+            git fetch origin main
+            git reset --hard origin/main
+
+            # 更新 release_meta.json
+            version="$(git describe --tags --always 2>/dev/null || echo main)-dev"
+            date="$(date +%Y-%m-%d)"
+            printf '{\n  "version": "%s",\n  "date": "%s"\n}\n' "$version" "$date" > release_meta.json
+
+            echo "✅ Deployed $(git log --oneline -1) at $(date)"
