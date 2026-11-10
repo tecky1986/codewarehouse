@@ -58,15 +58,24 @@ class SPAStaticFiles(StaticFiles):
         try:
             response = await super().get_response(path, scope)
             if response.status_code != 404:
+                if response.headers.get("content-type", "").startswith("text/html"):
+                    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
                 return response
         except StarletteHTTPException:
             pass
 
+        # Asset requests (has a file extension like .js/.css) must never fall
+        # back to index.html. Returning HTML for a missing asset makes browsers
+        # try to parse HTML as JS, surfacing confusing errors such as
+        # "Failed to fetch dynamically imported module".
+        if path and "." in Path(path).name:
+            raise StarletteHTTPException(status_code=404)
+
         scope2 = dict(scope)
         scope2["path"] = "/"
         index_response = await super().get_response("index.html", scope2)
-        if index_response.status_code == 200 and path:
-            index_response.headers["Cache-Control"] = "no-cache"
+        if index_response.status_code == 200:
+            index_response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         return index_response
 
 
