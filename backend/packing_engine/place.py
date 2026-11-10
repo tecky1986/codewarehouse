@@ -162,7 +162,6 @@ def _expand_candidates(candidates: list, cand: Candidate, prev_cap: float) -> No
             candidates.append(p)
     candidates.sort(key=lambda p: (-p[0], p[2], p[1]))
 
-
 def _eligible_containers(
     item: CargoItem,
     containers: list,
@@ -228,17 +227,26 @@ def _unassign_reason(item: CargoItem, containers: list, ctx: _Ctx) -> str:
 
 
 # ---------------------------------------------------------------------------
-# DBLF: deepest-first filling with cap candidate points.
+# Shared maximal-space packing core.
+#
+# Candidates are free boxes (`_Space`) carved out of the container.  After each
+# placement the hit space is split into the up-to-six remaining sub-boxes, so
+# side/top voids are reused instead of being abandoned with the container.
+# Each algorithm supplies a different `score` to order candidate spaces.
 # ---------------------------------------------------------------------------
 
+_SpaceScorer = Callable[["_Space", Candidate], tuple]
 
-def dblf(
+
+def _pack_spaces(
+    algorithm: str,
     items: list[CargoItem],
     containers: list[ContainerInstance],
     settings: dict,
     enabled_rules: list,
     site_groups: list,
     reporter: ProgressReporter,
+    score: _SpaceScorer,
 ) -> Plan:
     ctx = _Ctx(
         containers=containers,
@@ -250,43 +258,88 @@ def dblf(
     )
     t_groups = site_together_groups(items, site_groups)
     sep_sites = site_separate_sites(items, site_groups)
-    cands: dict[int, list] = {id(c): [(float(c.inner_l), 0.0, 0.0)] for c in containers}
+    spaces: dict[int, list[_Space]] = {
+        id(c): [_Space(0.0, 0.0, 0.0, float(c.inner_l), float(c.inner_w), c.max_z)]
+        for c in containers
+    }
     unassigned: list[CargoItem] = []
     ordered = order_items(items)
     seen_uids: set = set()
 
     if reporter.timed_out:
-        return _finish_plan("dblf", containers, list(ordered), timed_out=True)
+        return _finish_plan(algorithm, containers, list(ordered), timed_out=True)
 
     for item in ordered:
         if reporter.timed_out:
             rest = [i for i in ordered if i.uid not in seen_uids]
-            return _finish_plan("dblf", containers, rest, timed_out=True)
-        chosen_cand = None
+            return _finish_plan(algorithm, containers, rest, timed_out=True)
+        best: tuple[tuple, Candidate, "_Space"] | None = None
         for wave in _container_waves(item, containers, ctx, t_groups, sep_sites):
+            best = None
             for c in wave:
-                for (cap, y, z) in list(cands[id(c)]):
-                    cand = _try_place_at_cap(cap, y, z, item, c, ctx)
-                    if cand is not None:
-                        c.placed.append(cand)
-                        _expand_candidates(cands[id(c)], cand, cap)
-                        chosen_cand = cand
-                        break
-                if chosen_cand is not None:
-                    break
-            if chosen_cand is not None:
+                for s in list(spaces[id(c)]):
+                    for (dx, dy, dz) in _orientations(item):
+                        if dx > s.dx + 1e-9 or dy > s.dy + 1e-9 or dz > s.dz + 1e-9:
+                            continue
+                        x0 = s.x + max(0.0, s.dx - dx)
+                        cand = Candidate(
+                            item=item,
+                            container=c,
+                            x=x0,
+                            y=s.y,
+                            z=s.z,
+                            dx=dx,
+                            dy=dy,
+                            dz=dz,
+                            load_seq=len(c.placed) + 1,
+                        )
+                        if _first_violation(cand, ctx):
+                            continue
+                        sc = score(s, cand)
+                        if best is None or sc < best[0]:
+                            best = (sc, cand, s)
+            if best is not None:
                 break
-        if chosen_cand is not None:
+        if best is None:
+            unassigned.append(item)
+        else:
+            _, cand, _s = best
+            spaces[id(cand.container)] = _split_spaces(spaces[id(cand.container)], cand)
+            cand.container.placed.append(cand)
             seen_uids.add(item.uid)
             group = _group_of(item, t_groups)
             if group is not None and ctx.group_container.get(item.site) is None:
-                ctx.group_container[item.site] = chosen_cand.container
-        else:
-            reason = _unassign_reason(item, containers, ctx)
-            unassigned.append(item)
+                ctx.group_container[item.site] = cand.container
         reporter.tick()
 
-    return _finish_plan("dblf", containers, unassigned)
+    return _finish_plan(algorithm, containers, unassigned)
+
+
+# ---------------------------------------------------------------------------
+# DBLF: deepest-bottom-left-first filling over maximal free spaces.
+#
+# The earlier cap-point model only tracked a handful of candidate points along
+# the back wall, so leftover voids on the sides/top were never reused and each
+# container was abandoned after one thin layer.  The maximal-space model splits
+# the container into free boxes on every placement, so inner voids keep being
+# filled and containers only open when truly full.
+# ---------------------------------------------------------------------------
+
+
+def dblf(
+    items: list[CargoItem],
+    containers: list[ContainerInstance],
+    settings: dict,
+    enabled_rules: list,
+    site_groups: list,
+    reporter: ProgressReporter,
+) -> Plan:
+    def score(space: "_Space", cand: Candidate) -> tuple:
+        return (-(cand.x + cand.dx), cand.z, cand.y)
+
+    return _pack_spaces(
+        "dblf", items, containers, settings, enabled_rules, site_groups, reporter, score
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -375,71 +428,13 @@ def maximal_space(
     site_groups: list,
     reporter: ProgressReporter,
 ) -> Plan:
-    ctx = _Ctx(
-        containers=containers,
-        items=items,
-        settings=settings,
-        enabled_rules=enabled_rules,
-        site_groups=site_groups,
-        reporter=reporter,
+    def score(space: "_Space", cand: Candidate) -> tuple:
+        # deepest-first, then lowest z, then leftmost y, then tightest space
+        return (-(cand.x + cand.dx), cand.z, cand.y, space.volume())
+
+    return _pack_spaces(
+        "maxspace", items, containers, settings, enabled_rules, site_groups, reporter, score
     )
-    t_groups = site_together_groups(items, site_groups)
-    sep_sites = site_separate_sites(items, site_groups)
-    spaces: dict[int, list[_Space]] = {
-        id(c): [_Space(0.0, 0.0, 0.0, float(c.inner_l), float(c.inner_w), c.max_z)]
-        for c in containers
-    }
-    unassigned: list[CargoItem] = []
-    ordered = order_items(items)
-    seen_uids: set = set()
-
-    if reporter.timed_out:
-        return _finish_plan("maxspace", containers, list(ordered), timed_out=True)
-
-    for item in ordered:
-        if reporter.timed_out:
-            rest = [i for i in ordered if i.uid not in seen_uids]
-            return _finish_plan("maxspace", containers, rest, timed_out=True)
-        best: tuple[float, Candidate, _Space] | None = None
-        for wave in _container_waves(item, containers, ctx, t_groups, sep_sites):
-            best = None
-            for c in wave:
-                for s in list(spaces[id(c)]):
-                    for (dx, dy, dz) in _orientations(item):
-                        if dx > s.dx + 1e-9 or dy > s.dy + 1e-9 or dz > s.dz + 1e-9:
-                            continue
-                        x0 = s.x + max(0.0, s.dx - dx)
-                        score = (-x0, s.z, s.y, s.volume() / max(dx * dy * dz, 1e-9))
-                        cand = Candidate(
-                            item=item,
-                            container=c,
-                            x=x0,
-                            y=s.y,
-                            z=s.z,
-                            dx=dx,
-                            dy=dy,
-                            dz=dz,
-                            load_seq=len(c.placed) + 1,
-                        )
-                        if _first_violation(cand, ctx):
-                            continue
-                        if best is None or score < best[0]:
-                            best = (score, cand, s)
-            if best is not None:
-                break
-        if best is None:
-            unassigned.append(item)
-        else:
-            _, cand, s = best
-            spaces[id(cand.container)] = _split_spaces(spaces[id(cand.container)], cand)
-            cand.container.placed.append(cand)
-            seen_uids.add(item.uid)
-            group = _group_of(item, t_groups)
-            if group is not None and ctx.group_container.get(item.site) is None:
-                ctx.group_container[item.site] = cand.container
-        reporter.tick()
-
-    return _finish_plan("maxspace", containers, unassigned)
 
 
 # ---------------------------------------------------------------------------
