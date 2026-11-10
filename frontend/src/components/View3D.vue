@@ -78,7 +78,7 @@ function buildScene() {
     canvas: canvasEl.value,
     antialias: true,
   });
-  renderer.setSize(w, h);
+  renderer.setSize(w, h, false);
   renderer.setPixelRatio(window.devicePixelRatio);
 
   const amb = new THREE.AmbientLight(0xffffff, 0.7);
@@ -603,8 +603,8 @@ defineExpose({
 .canvas {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
+  width: 100% !important;
+  height: 100% !important;
   display: block;
 }
 
