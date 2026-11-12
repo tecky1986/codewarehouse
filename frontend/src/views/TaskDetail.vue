@@ -17,6 +17,7 @@ import View3D from "@/components/View3D.vue";
 import JobProgress from "@/components/JobProgress.vue";
 import StepNav from "@/components/StepNav.vue";
 import FirstUseGuide from "@/components/FirstUseGuide.vue";
+import VerifyCodeTip from "@/components/VerifyCodeTip.vue";
 
 const route = useRoute();
 const tid = computed(() => Number(route.params.id));
@@ -494,7 +495,9 @@ onMounted(loadTask);
               </td>
               <td>{{ pct(p.kpi.overall.completion) }}</td>
               <td>{{ pct(p.kpi.overall.constraint_ok_ratio) }}</td>
-              <td :class="{ fail: p.kpi.overall.verify_ok === false }">{{ verifyText(p) }}</td>
+              <td :class="{ fail: p.kpi.overall.verify_ok === false }">
+                <VerifyCodeTip :text="verifyText(p)" />
+              </td>
               <td>{{ p.kpi.overall.unassigned_count ?? 0 }}</td>
               <td>
                 {{ p.kpi.overall.elapsed_s != null ? p.kpi.overall.elapsed_s.toFixed(1) : "—" }}
@@ -509,7 +512,8 @@ onMounted(loadTask);
         </table>
       </div>
       <p class="hint">
-        E102 表示当前排未填满就开了新排；砌墙 / 切割遵守行纪律，DBLF / 最大空腔 / 极点可能出现该码。
+        鼠标悬停在红色校验码上可查看具体含义（如 E102 = 当前排未填满就开了新排）；完整
+        E101–E112 说明见「说明」页的校验码章节。
       </p>
     </section>
 
@@ -543,13 +547,15 @@ onMounted(loadTask);
               <td>{{ pct(c.load_seq_correct_ratio) }}</td>
               <td>{{ pct(c.constraint_ok_ratio) }}</td>
               <td :class="{ fail: c.verify_ok === false }">
-                {{
-                  c.verify_ok == null
-                    ? "—"
-                    : c.verify_ok
-                      ? "通过"
-                      : errorCodesText(c.verify_error_codes) || "未通过"
-                }}
+                <VerifyCodeTip
+                  :text="
+                    c.verify_ok == null
+                      ? '—'
+                      : c.verify_ok
+                        ? '通过'
+                        : errorCodesText(c.verify_error_codes) || '未通过'
+                  "
+                />
               </td>
             </tr>
           </tbody>

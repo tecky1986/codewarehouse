@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from "vue";
 import { useRoute } from "vue-router";
 import { Tasks, type Plan } from "@/api";
+import VerifyCodeTip from "@/components/VerifyCodeTip.vue";
 
 const route = useRoute();
 const tid = ref(Number(route.params.id));
@@ -122,10 +123,10 @@ onMounted(load);
             <span class="cap">约束满足</span>
           </div>
           <div class="metric">
-            <span class="num" :class="{ fail: p.kpi.overall.verify_ok === false }">{{
-              verifyText(p)
-            }}</span>
-            <span class="cap">校验</span>
+            <span class="num" :class="{ fail: p.kpi.overall.verify_ok === false }">
+              <VerifyCodeTip :text="verifyText(p)" />
+            </span>
+            <span class="cap">校验（悬停查看码含义）</span>
           </div>
           <div class="metric">
             <span class="num">{{ p.kpi.overall.unassigned_count ?? 0 }}</span>
@@ -138,8 +139,8 @@ onMounted(load);
             <span class="cap">耗时</span>
           </div>
         </div>
-        <p v-if="p.kpi.overall.verify_ok === false" class="verify-hint">
-          E102 表示当前排未填满就开了新排；砌墙 / 切割遵守行纪律。
+        <p class="verify-hint">
+          鼠标悬停在上方红色校验码上可查看具体含义；完整说明见「说明」页的校验码章节。
         </p>
 
         <div class="foot">
