@@ -17,7 +17,7 @@ from pathlib import Path
 
 from app.errors import AppError, ConflictError
 from app.importing import complete_rows
-from app.repos import ImportRowRepo, TaskRepo
+from app.repos import DB_WRITE_LOCK, ImportRowRepo, TaskRepo
 from packing_engine import normalize, runner
 from packing_engine.place import ProgressReporter
 from packing_engine import place2 as _place2  # noqa: F401  (registers algos)
@@ -81,7 +81,6 @@ class JobState:
 
 _REGISTRY: dict[int, JobState] = {}
 _REGISTRY_LOCK = threading.Lock()
-_WRITE_LOCK = threading.Lock()
 
 
 def get_job_state(run_id: int) -> JobState | None:
@@ -238,7 +237,7 @@ class JobsService:
             )
         ]
 
-        with _WRITE_LOCK:
+        with DB_WRITE_LOCK:
             cur = self.conn.execute(
                 "INSERT INTO packing_run (task_id, created_at, status, algorithms_json) VALUES (?, ?, 'running', ?)",
                 (
@@ -508,7 +507,7 @@ class JobsService:
         uid_to_row_id: dict[str, int] = {f"r{r['id']}": r["id"] for r in rows}
         timed_out = any(getattr(p, "timed_out", False) for p in plans)
 
-        with _WRITE_LOCK:
+        with DB_WRITE_LOCK:
             wconn = self._worker_conn()
             try:
                 for p in plans:
@@ -578,7 +577,7 @@ class JobsService:
             job.finished_at = time.time()
 
     def fail(self, job: JobState, message: str) -> None:
-        with _WRITE_LOCK:
+        with DB_WRITE_LOCK:
             wconn = self._worker_conn()
             try:
                 wconn.execute(

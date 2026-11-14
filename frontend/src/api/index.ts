@@ -6,6 +6,15 @@ async function req<T>(url: string, init?: RequestInit): Promise<T> {
     headers: { "Content-Type": "application/json" },
     ...init,
   });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const body = (await r.json()) as ApiEnvelope<T>;
+  if (!isOk(body)) throw new Error(body.message || `code=${body.code}`);
+  return body.data;
+}
+
+async function upload<T>(url: string, form: FormData): Promise<T> {
+  const r = await fetch(url, { method: "POST", body: form });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const body = (await r.json()) as ApiEnvelope<T>;
   if (!isOk(body)) throw new Error(body.message || `code=${body.code}`);
   return body.data;
@@ -52,27 +61,18 @@ export const Tasks = {
       body: JSON.stringify({ plan_id: planId }),
     }),
   clearRuns: (id: number) => req<null>(`/api/tasks/${id}/runs`, { method: "DELETE" }),
-  importFile: async (id: number, file: File) => {
+  importFile: (id: number, file: File) => {
     const form = new FormData();
     form.append("file", file);
-    const r = await fetch(`/api/tasks/${id}/import`, { method: "POST", body: form });
-    const body = (await r.json()) as ApiEnvelope<ImportPreview>;
-    if (!isOk(body)) throw new Error(body.message);
-    return body.data;
+    return upload<ImportPreview>(`/api/tasks/${id}/import`, form);
   },
   preview: (id: number) => req<ImportPreview>(`/api/tasks/${id}/import/preview`),
   pendingXlsxUrl: (id: number) => `/api/tasks/${id}/import/pending.xlsx`,
   matchedXlsxUrl: (id: number) => `/api/tasks/${id}/import/matched.xlsx`,
-  batchMaintain: async (id: number, file: File) => {
+  batchMaintain: (id: number, file: File) => {
     const form = new FormData();
     form.append("file", file);
-    const r = await fetch(`/api/tasks/${id}/import/batch-maintain`, {
-      method: "POST",
-      body: form,
-    });
-    const body = (await r.json()) as ApiEnvelope<Array<Record<string, unknown>>>;
-    if (!isOk(body)) throw new Error(body.message);
-    return body.data;
+    return upload<Array<Record<string, unknown>>>(`/api/tasks/${id}/import/batch-maintain`, form);
   },
   reMatch: (id: number) =>
     req<ImportPreview>(`/api/tasks/${id}/import/re-match`, { method: "POST" }),
@@ -410,17 +410,13 @@ export const Packages = {
     }),
   templateUrl: () => "/api/packages/template",
   exportUrl: () => "/api/packages/export",
-  importFile: async (file: File) => {
+  importFile: (file: File) => {
     const form = new FormData();
     form.append("file", file);
-    const r = await fetch("/api/packages/import", { method: "POST", body: form });
-    const body = (await r.json()) as ApiEnvelope<{
-      saved: PackageMaster[];
-      saved_count: number;
-      skipped: number;
-    }>;
-    if (!isOk(body)) throw new Error(body.message);
-    return body.data;
+    return upload<{ saved: PackageMaster[]; saved_count: number; skipped: number }>(
+      "/api/packages/import",
+      form,
+    );
   },
 };
 

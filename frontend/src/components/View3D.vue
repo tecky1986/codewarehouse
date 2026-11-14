@@ -33,6 +33,12 @@ let controls: OrbitControls | null = null;
 let animId = 0;
 let playTimer: ReturnType<typeof setInterval> | null = null;
 let resizeObserver: ResizeObserver | null = null;
+// stored listeners so onBeforeUnmount can remove them all
+let _onPointerDown: ((ev: PointerEvent) => void) | null = null;
+let _onPointerUp: (() => void) | null = null;
+let _onPointerLeave: (() => void) | null = null;
+let _onWheel: ((ev: WheelEvent) => void) | null = null;
+let _onWindowResize: (() => void) | null = null;
 
 const active = computed(() => props.containers[activeIdx.value] ?? props.containers[0] ?? null);
 
@@ -96,13 +102,18 @@ function buildScene() {
   controls.minDistance = 10;
   controls.maxDistance = 100000;
 
-  canvasEl.value.addEventListener("pointerdown", (ev: PointerEvent) => {
+  _onPointerDown = (ev: PointerEvent) => {
     onPointerDown(ev);
-  });
-  canvasEl.value.addEventListener("pointerup", onPointerUp);
-  canvasEl.value.addEventListener("pointerleave", onPointerUp);
-  canvasEl.value.addEventListener("wheel", onWheel, { passive: false });
-  window.addEventListener("resize", onResize);
+  };
+  _onPointerUp = onPointerUp;
+  _onPointerLeave = onPointerUp;
+  _onWheel = onWheel;
+  _onWindowResize = onResize;
+  canvasEl.value.addEventListener("pointerdown", _onPointerDown);
+  canvasEl.value.addEventListener("pointerup", _onPointerUp);
+  canvasEl.value.addEventListener("pointerleave", _onPointerLeave);
+  canvasEl.value.addEventListener("wheel", _onWheel, { passive: false });
+  window.addEventListener("resize", _onWindowResize);
 
   function loop() {
     animId = requestAnimationFrame(loop);
@@ -142,7 +153,7 @@ function createBox(p: Placement) {
 
 function buildContainer3D() {
   if (!scene || !containerGroup || !active.value) return;
-  containerGroup.clear();
+  disposeGroup(containerGroup);
   clearHighlight();
 
   const L = dims();
@@ -221,9 +232,10 @@ function highlight(p: Placement) {
   if (!containerGroup) return;
   for (const obj of containerGroup.children) {
     if (obj instanceof THREE.Mesh && obj.userData.importRowId === p.import_row_id) {
-      const w = (obj.geometry as THREE.BoxGeometry).parameters.width * 1.02;
-      const h = (obj.geometry as THREE.BoxGeometry).parameters.height * 1.02;
-      const d = (obj.geometry as THREE.BoxGeometry).parameters.depth * 1.02;
+      const up = obj.userData.p as Placement | undefined;
+      const w = up ? up.dim_x * 1.02 : 1;
+      const h = up ? up.dim_z * 1.02 : 1;
+      const d = up ? up.dim_y * 1.02 : 1;
       const geo = new THREE.BoxGeometry(w, h, d);
       const edges = new THREE.EdgesGeometry(geo);
       outline = new THREE.LineSegments(
@@ -247,14 +259,32 @@ function clearHighlight() {
   }
 }
 
+function disposeGroup(group: THREE.Group) {
+  for (const child of group.children) {
+    if (child instanceof THREE.Mesh) {
+      child.geometry.dispose();
+      const mat = child.material;
+      if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+      else mat?.dispose();
+    } else if (child instanceof THREE.LineSegments) {
+      child.geometry.dispose();
+      const mat = child.material;
+      if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+      else mat?.dispose();
+    }
+  }
+  group.clear();
+}
+
 function rebuild() {
   if (!containerGroup || !scene) return;
-  containerGroup.clear();
   clearHighlight();
+  disposeGroup(containerGroup);
   buildContainer3D();
 }
 
 function onContainerChange(idx: number) {
+  if (idx === activeIdx.value) return;
   activeIdx.value = idx;
   selected.value = null;
   emit("select", null);
@@ -387,10 +417,18 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   stopPlayback();
   cancelAnimationFrame(animId);
-  window.removeEventListener("resize", onResize);
+  if (canvasEl.value) {
+    if (_onPointerDown) canvasEl.value.removeEventListener("pointerdown", _onPointerDown);
+    if (_onPointerUp) canvasEl.value.removeEventListener("pointerup", _onPointerUp);
+    if (_onPointerLeave) canvasEl.value.removeEventListener("pointerleave", _onPointerLeave);
+    if (_onWheel) canvasEl.value.removeEventListener("wheel", _onWheel);
+  }
+  if (_onWindowResize) window.removeEventListener("resize", _onWindowResize);
   resizeObserver?.disconnect();
+  disposeGroup(containerGroup!);
   controls?.dispose();
   renderer?.dispose();
+  document.body.style.overflow = "";
 });
 
 watch(
@@ -404,8 +442,6 @@ watch(
   },
   { deep: false },
 );
-
-watch(activeIdx, (v) => onContainerChange(v));
 
 defineExpose({
   startPlayback,

@@ -1,10 +1,16 @@
 import json
 import re
 import sqlite3
+import threading
 from datetime import datetime, timezone
 from typing import Any
 
 from app.errors import ConflictError, InUseError, NotFoundError
+
+# Shared write lock: HTTP request threads (repos) and background worker
+# threads (jobs) both write to the same SQLite file; serialise all writes
+# through this lock to prevent cascading-delete races on `placement`.
+DB_WRITE_LOCK = threading.Lock()
 
 _WILDCARD_RE = re.compile(r"[?#]")
 
@@ -461,45 +467,46 @@ class ImportRowRepo:
         # placements reference import_row via import_row_id (NO ACTION FK).
         # Drop this task's placements first; they are regenerated on the
         # next compute and must not block the re-import of import rows.
-        self.conn.execute(
-            "DELETE FROM placement WHERE import_row_id IN "
-            "(SELECT id FROM import_row WHERE task_id = ?)",
-            (task_id,),
-        )
-        self.conn.execute("DELETE FROM import_row WHERE task_id = ?", (task_id,))
-        cols = (
-            "task_id",
-            "row_no",
-            "a_no",
-            "b_len",
-            "c_wid",
-            "d_hgt",
-            "e_cbm",
-            "f_outcase",
-            "g_packmatls",
-            "h_tare",
-            "i_net",
-            "j_gross",
-            "k_pn",
-            "l_note",
-            "m_site",
-            "o_ref",
-            "p_dn",
-            "q_misc",
-            "filled_fields_json",
-            "source_flag",
-        )
-        for r in rows:
-            vals = [task_id if c == "task_id" else r.get(c) for c in cols]
-            if isinstance(r.get("filled_fields_json"), (list, dict)):
-                vals[cols.index("filled_fields_json")] = json.dumps(
-                    r["filled_fields_json"], ensure_ascii=False
-                )
+        with DB_WRITE_LOCK:
             self.conn.execute(
-                f"INSERT INTO import_row ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
-                vals,
+                "DELETE FROM placement WHERE import_row_id IN "
+                "(SELECT id FROM import_row WHERE task_id = ?)",
+                (task_id,),
             )
-        self.conn.commit()
+            self.conn.execute("DELETE FROM import_row WHERE task_id = ?", (task_id,))
+            cols = (
+                "task_id",
+                "row_no",
+                "a_no",
+                "b_len",
+                "c_wid",
+                "d_hgt",
+                "e_cbm",
+                "f_outcase",
+                "g_packmatls",
+                "h_tare",
+                "i_net",
+                "j_gross",
+                "k_pn",
+                "l_note",
+                "m_site",
+                "o_ref",
+                "p_dn",
+                "q_misc",
+                "filled_fields_json",
+                "source_flag",
+            )
+            for r in rows:
+                vals = [task_id if c == "task_id" else r.get(c) for c in cols]
+                if isinstance(r.get("filled_fields_json"), (list, dict)):
+                    vals[cols.index("filled_fields_json")] = json.dumps(
+                        r["filled_fields_json"], ensure_ascii=False
+                    )
+                self.conn.execute(
+                    f"INSERT INTO import_row ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
+                    vals,
+                )
+            self.conn.commit()
         return self.list_by_task(task_id)
 
 

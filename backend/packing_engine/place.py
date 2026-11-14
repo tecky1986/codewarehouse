@@ -120,47 +120,15 @@ def _first_violation(cand: Candidate, ctx: _Ctx) -> tuple[str, str] | None:
     return violations[0]
 
 
-def _try_place_at_cap(
-    cap: float,
-    y: float,
-    z: float,
-    item: CargoItem,
-    container: ContainerInstance,
-    ctx: _Ctx,
-) -> Candidate | None:
-    """Place item flush at back face `cap` (x = cap - dx); return cand or None."""
-    load_seq = len(container.placed) + 1
-    z_max = container.max_z
-    for (dx, dy, dz) in _orientations(item):
-        x = cap - dx
-        if x < -1e-9 or dy > container.inner_w - y + 1e-9 or dz > z_max - z + 1e-9:
-            continue
-        cand = Candidate(
-            item=item,
-            container=container,
-            x=max(0.0, x),
-            y=y,
-            z=z,
-            dx=dx,
-            dy=dy,
-            dz=dz,
-            load_seq=load_seq,
-        )
-        if _first_violation(cand, ctx) is None:
-            return cand
-    return None
+# ---------------------------------------------------------------------------
+# Shared maximal-space packing core.
+#
+# Candidates are free boxes (`_Space`) carved out of the container.  After each
+# placement the hit space is split into the up-to-six remaining sub-boxes, so
+# side/top voids are reused instead of being abandoned with the container.
+# Each algorithm supplies a different `score` to order candidate spaces.
+# ---------------------------------------------------------------------------
 
-
-def _expand_candidates(candidates: list, cand: Candidate, prev_cap: float) -> None:
-    z_max = cand.container.max_z
-    for p in (
-        (prev_cap, cand.y + cand.dy, cand.z),
-        (prev_cap, cand.y, cand.z + cand.dz) if cand.z + cand.dz <= z_max + 1e-9 else None,
-        (cand.x, cand.y, cand.z),
-    ):
-        if p is not None and p not in candidates:
-            candidates.append(p)
-    candidates.sort(key=lambda p: (-p[0], p[2], p[1]))
 
 def _eligible_containers(
     item: CargoItem,
@@ -202,28 +170,6 @@ def _container_waves(
     if empty:
         waves.append(empty)
     return waves
-
-
-def _unassign_reason(item: CargoItem, containers: list, ctx: _Ctx) -> str:
-    seen = set()
-    for c in containers:
-        check = CheckContext(settings=ctx.settings, placed=c.placed)
-        for (dx, dy, dz) in _orientations(item):
-            cand = Candidate(
-                item=item,
-                container=c,
-                x=0.0,
-                y=0.0,
-                z=0.0,
-                dx=dx,
-                dy=dy,
-                dz=dz,
-                load_seq=len(c.placed) + 1,
-            )
-            for name, msg in run_checkers(cand, check, ctx.enabled_rules):
-                if name not in ("bounds", "collision"):
-                    seen.add(msg)
-    return next(iter(seen)) if seen else "无可用箱位"
 
 
 # ---------------------------------------------------------------------------

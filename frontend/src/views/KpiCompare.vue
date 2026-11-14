@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, computed, watch } from "vue";
 import { useRoute } from "vue-router";
 import { Tasks, type Plan } from "@/api";
 import VerifyCodeTip from "@/components/VerifyCodeTip.vue";
 
 const route = useRoute();
-const tid = ref(Number(route.params.id));
+const tid = computed(() => Number(route.params.id));
 
 const plans = ref<Plan[]>([]);
 const error = ref("");
@@ -15,6 +15,7 @@ const sortedPlans = computed(() =>
   [...plans.value].sort((a, b) => {
     const ka = a.kpi.overall;
     const kb = b.kpi.overall;
+    // descending completion, ascending containers_used, descending vol_util
     if ((kb.completion || 0) !== (ka.completion || 0))
       return (kb.completion || 0) - (ka.completion || 0);
     if ((kb.containers_used || 0) !== (ka.containers_used || 0))
@@ -42,11 +43,15 @@ function verifyText(p: Plan): string {
   return errorCodesText(o.verify_error_codes) || "未通过";
 }
 
+let loadSeq = 0;
+
 async function load() {
+  const seq = ++loadSeq;
   loading.value = true;
   error.value = "";
   try {
-    plans.value = await Tasks.plans(tid.value);
+    const result = await Tasks.plans(tid.value);
+    if (seq === loadSeq) plans.value = result;
   } catch (e) {
     error.value = (e as Error).message;
   } finally {
@@ -69,6 +74,9 @@ function exportPlan(p: Plan, fmt: "xlsx" | "csv") {
 }
 
 onMounted(load);
+watch(tid, (newId, oldId) => {
+  if (newId !== oldId) load();
+});
 </script>
 
 <template>
