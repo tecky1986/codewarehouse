@@ -5,20 +5,13 @@ from dataclasses import replace
 
 from packing_engine.groups import order_items
 from packing_engine.model import Candidate, CargoItem, ContainerInstance, Plan
-from packing_engine.place import ProgressReporter, _finish_plan, dblf
+from packing_engine.place import _orientations, ProgressReporter, _finish_plan, dblf
 from packing_engine.rules import CheckContext, run_checkers
 
 
-def _orientations(item: CargoItem):
-    if item.rotatable:
-        oris = [(item.l, item.w, item.h), (item.w, item.l, item.h)]
-        return sorted(dict.fromkeys(oris), key=lambda d: (d[0], d[1], d[2]))
-    return [(item.l, item.w, item.h)]
-
-
-def _valid_candidates(item: CargoItem, container: ContainerInstance, placed: list, settings: dict, enabled_rules: list, sample_size: int | None = None) -> list[Candidate]:
+def _valid_candidates(item: CargoItem, container: ContainerInstance, placed: list, settings: dict, enabled_rules: list, sample_size: int | None = None, rng: random.Random | None = None) -> list[Candidate]:
     out: list[Candidate] = []
-    rng = random.Random(0)
+    rng = rng or random.Random(0)
     if not placed:
         check_ctx = CheckContext(settings=settings, placed=[])
         for (dx, dy, dz) in _orientations(item):
@@ -101,7 +94,7 @@ def _remove_neighborhood(containers: list[ContainerInstance], neighborhood_size:
     return [item for _, _, item in selected], removed_containers
 
 
-def _try_reinsert(items: list[CargoItem], containers: list[ContainerInstance], settings: dict, enabled_rules: list, containers_used: set[int]) -> tuple[int, list[CargoItem]]:
+def _try_reinsert(items: list[CargoItem], containers: list[ContainerInstance], settings: dict, enabled_rules: list, containers_used: set[int], rng: random.Random) -> tuple[int, list[CargoItem]]:
     unassigned: list[CargoItem] = []
     ordered = order_items(items)
     placed_count = 0
@@ -118,7 +111,7 @@ def _try_reinsert(items: list[CargoItem], containers: list[ContainerInstance], s
             c = containers[ci]
             if not _fits_payload(c, item):
                 continue
-            candidates = _valid_candidates(item, c, c.placed, settings, enabled_rules, sample_size=int(settings.get("lns_candidate_sample", 48)))
+            candidates = _valid_candidates(item, c, c.placed, settings, enabled_rules, sample_size=int(settings.get("lns_candidate_sample", 48)), rng=rng)
             if not candidates:
                 continue
             best = min(candidates, key=lambda cand: (-(cand.x + cand.dx), cand.z, cand.y, cand.x))
@@ -167,7 +160,7 @@ def lns(
         neighbor, removed_ids = _remove_neighborhood(trial.containers, neighborhood_size, rng)
         if not neighbor:
             break
-        _, placed_unassigned = _try_reinsert(neighbor, trial.containers, settings, enabled_rules, removed_ids)
+        _, placed_unassigned = _try_reinsert(neighbor, trial.containers, settings, enabled_rules, removed_ids, rng)
         trial.unassigned.extend(placed_unassigned)
         trial_key = _score_key(trial)
         if trial_key < best_key:

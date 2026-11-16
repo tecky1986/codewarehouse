@@ -33,7 +33,6 @@ def run_algorithms(
             return plan
         plan = fn(items, containers, settings, enabled_rules, site_groups, rep)
         plan.elapsed_s = round(time.monotonic() - t0, 3)
-        plan.kpi = evaluate(plan, len(items), elapsed_by_algo)
         return plan
 
     with ThreadPoolExecutor(max_workers=len(algorithms) or 1) as ex:

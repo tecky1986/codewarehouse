@@ -3,6 +3,7 @@ import { ref, onMounted, computed, watch } from "vue";
 import { useRoute } from "vue-router";
 import { Tasks, type Plan } from "@/api";
 import VerifyCodeTip from "@/components/VerifyCodeTip.vue";
+import { pct, verifyText } from "@/utils/kpi";
 
 const route = useRoute();
 const tid = computed(() => Number(route.params.id));
@@ -23,25 +24,6 @@ const sortedPlans = computed(() =>
     return (kb.vol_util || 0) - (ka.vol_util || 0);
   }),
 );
-
-function pct(v: number | undefined): string {
-  if (v == null) return "—";
-  return (v * 100).toFixed(1) + "%";
-}
-
-function errorCodesText(codes?: Record<string, number> | null): string {
-  if (!codes) return "";
-  return Object.entries(codes)
-    .map(([k, n]) => (n > 1 ? `${k}×${n}` : k))
-    .join(" ");
-}
-
-function verifyText(p: Plan): string {
-  const o = p.kpi.overall;
-  if (o.verify_ok == null) return "—";
-  if (o.verify_ok) return "通过";
-  return errorCodesText(o.verify_error_codes) || "未通过";
-}
 
 let loadSeq = 0;
 

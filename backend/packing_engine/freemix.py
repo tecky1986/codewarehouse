@@ -38,7 +38,8 @@ def lower_bound(items, catalog: dict[str, ContainerInstance]) -> int:
     max_pay = max(c.max_payload for c in catalog.values()) if catalog else 0
     lb_vol = int(-(-total_vol // max_vol)) if max_vol > 0 else 0
     lb_pay = int(-(-total_gross // max_pay)) if max_pay > 0 else 0
-    return max(lb_vol, lb_pay, 1) if items else 1
+    lb = max(lb_vol, lb_pay, 1)
+    return lb
 
 
 def combinations_bounded(
@@ -142,9 +143,14 @@ def search(
         used = overall["containers_used"]
         vol_util = overall["vol_util"]
         freight = overall.get("total_freight", 0.0)
-        # Primary: fully loaded? Secondary: lowest freight. Tertiary: fewer containers, higher vol util.
+        # A fully-loaded combo always beats a partial one.
+        # Among partials, prefer the one that packs the most volume (highest
+        # completion), then lowest freight, then fewest containers.
         fully_loaded = 0 if completion >= 1.0 - 1e-9 else 1
-        key = (fully_loaded, freight, used, -vol_util)
+        if fully_loaded:
+            key = (0, 0.0, used, -vol_util)
+        else:
+            key = (1, -completion, freight, used)
         if best is None or key < best[0]:
             best = (key, plan)
         reporter.tick()

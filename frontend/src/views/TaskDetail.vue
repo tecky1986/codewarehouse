@@ -18,6 +18,7 @@ import JobProgress from "@/components/JobProgress.vue";
 import StepNav from "@/components/StepNav.vue";
 import FirstUseGuide from "@/components/FirstUseGuide.vue";
 import VerifyCodeTip from "@/components/VerifyCodeTip.vue";
+import { pct as kpiPct, errorCodesText, verifyText } from "@/utils/kpi";
 
 const route = useRoute();
 const tid = computed(() => Number(route.params.id));
@@ -37,22 +38,7 @@ const selected = ref<Placement | null>(null);
 const algos = ref<string[]>(ALGORITHMS.filter((a) => a.key !== "freemix").map((a) => a.key));
 
 function pct(v: number | undefined | null): string {
-  if (v == null) return "—";
-  return (v * 100).toFixed(1) + "%";
-}
-
-function errorCodesText(codes?: Record<string, number> | null): string {
-  if (!codes) return "";
-  return Object.entries(codes)
-    .map(([k, n]) => (n > 1 ? `${k}×${n}` : k))
-    .join(" ");
-}
-
-function verifyText(p: Plan): string {
-  const o = p.kpi.overall;
-  if (o.verify_ok == null) return "—";
-  if (o.verify_ok) return "通过";
-  return errorCodesText(o.verify_error_codes) || "未通过";
+  return kpiPct(v);
 }
 
 const _parseJsonField = (v: unknown): Record<string, unknown> => {
@@ -207,7 +193,6 @@ async function loadTask() {
       preview.value = null;
     }
     syncAlgorithmsToMode();
-    if (task.value.status === "failed") task.value.status = "draft";
     await loadPlans();
   } catch (e) {
     error.value = (e as Error).message;
@@ -579,7 +564,7 @@ onMounted(loadTask);
     </section>
 
     <div v-if="!plans.length && !showJob" class="empty">
-      暂无方案。完成配置后点击「{{ plans.length ? "重新计算" : "开始计算" }}」。
+      暂无方案。完成配置后点击「开始计算」。
     </div>
   </div>
 
