@@ -1,4 +1,6 @@
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import { VERIFY_CODES } from "@/utils/verifyCodes";
+</script>
 
 <template>
   <div class="page">
@@ -555,61 +557,9 @@
           </tr>
         </thead>
         <tbody>
-          <tr>
-            <td class="code">E101</td>
-            <td>外侧货物阻挡内侧货物——外层箱遮蔽了内层箱的取货路径。</td>
-          </tr>
-          <tr>
-            <td class="code">E102</td>
-            <td>
-              当前排尚未完成——新的一排（row）在前一排未填满时即被开启；砌墙 /
-              切割算法遵守行纪律，DBLF / 最大空腔 / 极点算法可能出现此码。
-            </td>
-          </tr>
-          <tr>
-            <td class="code">E103</td>
-            <td>上层货物缺少支撑——悬空货物下方无承托。</td>
-          </tr>
-          <tr>
-            <td class="code">E104</td>
-            <td>
-              叉车进入路径被阻挡——叉车从门口（x=0）向内侧（x=inner_l）前进时，同 y
-              带内已有货物高出叉车工作高度，挡住了货叉。
-            </td>
-          </tr>
-          <tr>
-            <td class="code">E105</td>
-            <td>货物放置路径发生碰撞——放置过程中货叉与已有货物碰撞。</td>
-          </tr>
-          <tr>
-            <td class="code">E106</td>
-            <td>货叉无法退出——卸货时货叉被相邻货物卡住，无法水平退出。</td>
-          </tr>
-          <tr>
-            <td class="code">E107</td>
-            <td>叉车无法倒退出柜——卸货完成后叉车无法从柜内倒退出门。</td>
-          </tr>
-          <tr>
-            <td class="code">E108</td>
-            <td>门架举升高度不足——货物顶部超过门架 / 门框高度，叉车无法举升到位。</td>
-          </tr>
-          <tr>
-            <td class="code">E109</td>
-            <td>货物无法通过柜门——货物尺寸超过柜门开口（door_w / door_h）。</td>
-          </tr>
-          <tr>
-            <td class="code">E110</td>
-            <td>
-              货物超过下层承重——被压货物的每箱承重量（max_load）超限；max_load=0 表示不可被压。
-            </td>
-          </tr>
-          <tr>
-            <td class="code">E111</td>
-            <td>装载顺序存在循环依赖——A 压在 B 上，B 又压在 A 上，形成无法打破的循环。</td>
-          </tr>
-          <tr>
-            <td class="code">E112</td>
-            <td>未预留叉车作业空间——货物布置导致叉车无法在柜内正常作业。</td>
+          <tr v-for="(meaning, code) in VERIFY_CODES" :key="code">
+            <td class="code">{{ code }}</td>
+            <td>{{ meaning }}</td>
           </tr>
         </tbody>
       </table>

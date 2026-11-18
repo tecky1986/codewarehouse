@@ -230,22 +230,6 @@ def _withdraw_blocker(p: Candidate, placed: list[Candidate]) -> Optional[Candida
     return None
 
 
-def _row_front_face(placed: list[Candidate], z_level: float, y: float, dy: float) -> float:
-    """Deepest front face (min x) of any box in the same y-band at z_level.
-
-    A row is "complete" when its front face has reached the door (x = 0).
-    Returns min x over boxes in the band, or 0.0 when the band is empty
-    (an empty band is trivially complete).
-    """
-    xs = [
-        p.x
-        for p in placed
-        if _z_level(p) == z_level
-        and _y_overlap(p.y, p.dy, y, dy)
-    ]
-    return min(xs) if xs else 0.0
-
-
 # --------------------------------------------------------------------------
 # forward replay
 # --------------------------------------------------------------------------

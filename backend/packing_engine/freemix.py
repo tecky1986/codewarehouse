@@ -31,15 +31,15 @@ def _instances_for(types: list[tuple[str, int]], catalog: dict[str, ContainerIns
     return out
 
 
-def lower_bound(items, catalog: dict[str, ContainerInstance]) -> int:
+def lower_bound(items, catalog: dict[str, ContainerInstance]) -> tuple[int, int]:
+    """Return (lb_vol, lb_pay) — volume-based and payload-based lower bounds."""
     total_vol = sum(i.volume_m3() for i in items)
     total_gross = sum(i.gross for i in items)
     max_vol = max(c.volume_m3 for c in catalog.values()) if catalog else 0
     max_pay = max(c.max_payload for c in catalog.values()) if catalog else 0
     lb_vol = int(-(-total_vol // max_vol)) if max_vol > 0 else 0
     lb_pay = int(-(-total_gross // max_pay)) if max_pay > 0 else 0
-    lb = max(lb_vol, lb_pay, 1)
-    return lb
+    return lb_vol, lb_pay
 
 
 def combinations_bounded(
@@ -120,8 +120,9 @@ def search(
     """
     placement_fn = placement_fn or dblf
     catalog_codes = list(catalog.keys())
-    lb = lower_bound(items, catalog)
-    upper = min(lb + 3, 20)
+    lb_vol, lb_pay = lower_bound(items, catalog)
+    lb = max(lb_vol, lb_pay, 1)
+    upper = min(max(lb + 3, lb_pay + 1), 20)
 
     combos = list(combinations_bounded(catalog_codes, locks, lb, upper))
     if not combos:

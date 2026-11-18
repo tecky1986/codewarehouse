@@ -204,7 +204,7 @@ def _pack_spaces(
     )
     t_groups = site_together_groups(items, site_groups)
     sep_sites = site_separate_sites(items, site_groups)
-    spaces: dict[int, list[_Space]] = {
+    spaces: dict[int, list["_Space"]] = {
         id(c): [_Space(0.0, 0.0, 0.0, float(c.inner_l), float(c.inner_w), c.max_z)]
         for c in containers
     }
@@ -259,6 +259,64 @@ def _pack_spaces(
         reporter.tick()
 
     return _finish_plan(algorithm, containers, unassigned)
+
+
+def _pack_group(
+    group: list[CargoItem],
+    ctx: _Ctx,
+    t_groups: dict,
+    sep_sites: set,
+    spaces: dict[int, list["_Space"]],
+    score: _SpaceScorer,
+    unassigned: list[CargoItem],
+    seen_uids: set,
+) -> None:
+    """Place every item in *group* using the shared candidate-space loop.
+
+    Extracted from the original wall_fill so the per-item placement logic is
+    identical to _pack_spaces — only the `score` and the item ordering differ.
+    """
+    for item in group:
+        if item.uid in seen_uids:
+            continue
+        best: tuple[tuple, Candidate, "_Space"] | None = None
+        for wave in _container_waves(item, ctx.containers, ctx, t_groups, sep_sites):
+            best = None
+            for c in wave:
+                for s in list(spaces[id(c)]):
+                    for (dx, dy, dz) in _orientations(item):
+                        if dx > s.dx + 1e-9 or dy > s.dy + 1e-9 or dz > s.dz + 1e-9:
+                            continue
+                        x0 = s.x + max(0.0, s.dx - dx)
+                        cand = Candidate(
+                            item=item,
+                            container=c,
+                            x=x0,
+                            y=s.y,
+                            z=s.z,
+                            dx=dx,
+                            dy=dy,
+                            dz=dz,
+                            load_seq=len(c.placed) + 1,
+                        )
+                        if _first_violation(cand, ctx):
+                            continue
+                        sc = score(s, cand)
+                        if best is None or sc < best[0]:
+                            best = (sc, cand, s)
+            if best is not None:
+                break
+        if best is None:
+            unassigned.append(item)
+            continue
+        _, cand, _s = best
+        spaces[id(cand.container)] = _split_spaces(spaces[id(cand.container)], cand)
+        cand.container.placed.append(cand)
+        seen_uids.add(item.uid)
+        grp = _group_of(item, t_groups)
+        if grp is not None and ctx.group_container.get(item.site) is None:
+            ctx.group_container[item.site] = cand.container
+        ctx.reporter.tick()
 
 
 # ---------------------------------------------------------------------------
@@ -430,7 +488,7 @@ def wall_fill(
     )
     t_groups = site_together_groups(items, site_groups)
     sep_sites = site_separate_sites(items, site_groups)
-    spaces: dict[int, list[_Space]] = {
+    spaces: dict[int, list["_Space"]] = {
         id(c): [_Space(0.0, 0.0, 0.0, float(c.inner_l), float(c.inner_w), c.max_z)]
         for c in containers
     }
@@ -449,58 +507,17 @@ def wall_fill(
     fill_groups = [gv for cto, gv in groups if cto in small_types]
     fill_groups.sort(key=lambda gv: min(min(i.l, i.w, i.h) for i in gv))
 
-    def _try_place_all(group: list[CargoItem]) -> None:
-        for item in group:
-            if item.uid in seen_uids or reporter.timed_out:
-                continue
-            best: tuple[tuple, Candidate, _Space] | None = None
-            for wave in _container_waves(item, containers, ctx, t_groups, sep_sites):
-                best = None
-                for c in wave:
-                    for s in list(spaces[id(c)]):
-                        for (dx, dy, dz) in _orientations(item):
-                            if dx > s.dx + 1e-9 or dy > s.dy + 1e-9 or dz > s.dz + 1e-9:
-                                continue
-                            x0 = s.x + max(0.0, s.dx - dx)
-                            cand = Candidate(
-                                item=item,
-                                container=c,
-                                x=x0,
-                                y=s.y,
-                                z=s.z,
-                                dx=dx,
-                                dy=dy,
-                                dz=dz,
-                                load_seq=len(c.placed) + 1,
-                            )
-                            if _first_violation(cand, ctx):
-                                continue
-                            score = (-x0, s.z, s.y, s.volume() / max(dx * dy * dz, 1e-9))
-                            if best is None or score < best[0]:
-                                best = (score, cand, s)
-                if best is not None:
-                    break
-            if best is None:
-                unassigned.append(item)
-                continue
-            _, cand, _s = best
-            spaces[id(cand.container)] = _split_spaces(spaces[id(cand.container)], cand)
-            cand.container.placed.append(cand)
-            seen_uids.add(item.uid)
-            grp = _group_of(item, t_groups)
-            if grp is not None and ctx.group_container.get(item.site) is None:
-                ctx.group_container[item.site] = cand.container
-            reporter.tick()
+    def _wall_score(space: "_Space", cand: Candidate) -> tuple:
+        return (-cand.x, cand.z, cand.y, space.volume() / max(cand.dx * cand.dy * cand.dz, 1e-9))
 
     for group in wall_groups:
         if reporter.timed_out:
             break
-        _try_place_all(group)
+        _pack_group(group, ctx, t_groups, sep_sites, spaces, _wall_score, unassigned, seen_uids)
     for group in fill_groups:
         if reporter.timed_out:
             break
-        _try_place_all(group)
-
+        _pack_group(group, ctx, t_groups, sep_sites, spaces, _wall_score, unassigned, seen_uids)
     return _finish_plan("wall_fill", containers, unassigned)
 
 
